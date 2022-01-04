@@ -24,6 +24,7 @@
       - [通常のジェネリックとリバースジェネリックの組み合わせ](#通常のジェネリックとリバースジェネリックの組み合わせ)
       - [where句を使った型制約も同じように設定できる(可能性がある)](#where句を使った型制約も同じように設定できる可能性がある)
       - [より複雑な型も同じように扱える](#より複雑な型も同じように扱える)
+    - [将来的な話](#将来的な話)
   - [参考リンク](#参考リンク)
 
 ## 概要
@@ -355,6 +356,20 @@ func makeCollections<T>(with element: T) -> <C, D>(some Collection<.Element == C
 
 関連スレッド: https://forums.swift.org/t/reverse-generics-and-opaque-result-types/21608
 
+### 将来的な話
+
+Opaque Result Typesで使われている`some`キーワードの意味を広げて「匿名のジェネリック型」として関数の引数にも使えるようにしようとしている。
+
+```swift
+func makeCollection(with number: some Numeric) -> some Collection {
+  return [number]
+}
+```
+
+※ この場合、引数の型は`makeCollection`関数のcallerで決められる。
+
+関連スレッド: https://forums.swift.org/t/discussion-easing-the-learning-curve-for-introducing-generic-parameters/52891#type-parameter-inference-via-some-4
+
 ## 参考リンク
 
 - https://github.com/apple/swift-evolution/blob/main/proposals/0244-opaque-result-types.md
@@ -362,3 +377,4 @@ func makeCollections<T>(with element: T) -> <C, D>(some Collection<.Element == C
 - https://forums.swift.org/t/se-0328-structural-opaque-result-types/53248
 - https://forums.swift.org/t/pitch-light-weight-same-type-constraint-syntax/52889
 - https://forums.swift.org/t/reverse-generics-and-opaque-result-types/21608
+- https://forums.swift.org/t/discussion-easing-the-learning-curve-for-introducing-generic-parameters/52891
