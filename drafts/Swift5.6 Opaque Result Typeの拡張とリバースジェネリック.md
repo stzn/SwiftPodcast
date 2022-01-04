@@ -256,7 +256,7 @@ func caller() {
 
 ```swift
 // リバースジェネリック
-func callee<^T: Numeric>() -> T {
+func callee() -> some T {
   if Bool.random() {
     return 42
   } else {
