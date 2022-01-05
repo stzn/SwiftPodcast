@@ -4,11 +4,11 @@
   - [概要](#概要)
   - [内容](#内容)
     - [ジェネリックとは？](#ジェネリックとは)
-    - [ジェネリック Manifest](#ジェネリック-manifest)
+    - [Generics Manifesto](#generics-manifesto)
     - [用語紹介](#用語紹介)
       - [型レベルの抽象化(ジェネリック)](#型レベルの抽象化ジェネリック)
       - [値レベルの抽象化(存在型)](#値レベルの抽象化存在型)
-    - [Generics Manifestで足りないもの、再考の余地があるもの](#generics-manifestで足りないもの再考の余地があるもの)
+    - [Generics Manifestoで足りないもの、再考の余地があるもの](#generics-manifestoで足りないもの再考の余地があるもの)
       - [値レベルの抽象化の制限](#値レベルの抽象化の制限)
         - [問題点](#問題点)
         - [解決案](#解決案)
@@ -22,8 +22,8 @@
 
 ## 概要
 
-以前よりSwift ジェネリックの進むべき方向としてジェネリック Manifestが存在していた。現在では、コアな機能の実装は完了している。
-Generics Manifestでまだ未実装の部分の実装を進めるにあたって、足りない機能や再考が必要と考えられる機能などについて、ロードマップとして示された。
+以前よりジェネリックの進むべき方向としてGenerics Manifestoが存在していた。現在では、コアな機能の実装は完了している。
+Generics Manifestoでまだ未実装の部分の実装を進めるにあたって、足りない機能や再考が必要と考えられる機能などについて、ロードマップとして示された。
 
 関連スレッド: https://forums.swift.org/t/improving-the-ui-of-generics/22814
 
@@ -37,7 +37,7 @@ Generics Manifestでまだ未実装の部分の実装を進めるにあたって
 
 関連ドキュメント: https://docs.swift.org/swift-book/LanguageGuide/Generics.html
 
-### ジェネリック Manifest
+### Generics Manifesto
 
 Swift 3 リリース時のSwiftのジェネリックの足りない機能や改善点などについてのSwift Core teamやdeveloperの話し合いの結果をまとめたもの。
 
@@ -81,7 +81,7 @@ var dog: Animal = Dog()
 dog = Cat() // ok
 ```
 
-### Generics Manifestで足りないもの、再考の余地があるもの
+### Generics Manifestoで足りないもの、再考の余地があるもの
 
 `Collection`プロトコルを使って考えてみる。
 
