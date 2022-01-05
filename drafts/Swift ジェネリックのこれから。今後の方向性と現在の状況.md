@@ -267,7 +267,7 @@ func concatenate<A: Collection, B: Collection>(a: A, b: B) -> [A.Element]
 
 - 引数や戻り値に直接制約を書けるようにしたい  
 
-※ シンタックスはイメージ
+※ シンタックスは未定
 
 ```swift
 func concatenate<T>(a: some Collection<.Element == T>, b: some Collection<.Element == T>)
@@ -275,6 +275,10 @@ func concatenate<T>(a: some Collection<.Element == T>, b: some Collection<.Eleme
 ```
 
 関連スレッド: https://forums.swift.org/t/discussion-easing-the-learning-curve-for-introducing-generic-parameters/52891
+
+関連PR:
+https://github.com/apple/swift/pull/40715
+https://github.com/apple/swift/pull/40714
 
 - 存在型を使っていることを明確にして誤用を防ぎたい  
 ※ これは別で取り上げる
@@ -291,3 +295,4 @@ func concatenate<T>(a: some Collection<.Element == T>, b: some Collection<.Eleme
 - https://github.com/apple/swift-evolution/blob/main/proposals/0328-structural-opaque-result-types.md
 - https://forums.swift.org/t/se-0335-introduce-existential-any/53934/125
 - https://forums.swift.org/t/discussion-easing-the-learning-curve-for-introducing-generic-parameters/52891
+- https://github.com/apple/swift/pull/40715
