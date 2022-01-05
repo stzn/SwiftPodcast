@@ -341,7 +341,7 @@ func makeCollection<T>(with element: T) -> (some Collection, some Collection) {
 }
 
 // Elementが同じCollectionとCollectionの配列を返す
-func makeCollection<T>(with element: T) -> (some Collection, some [Collection]) {
+func makeCollection<T>(with element: T) -> (some Collection, some Collection) {
   return ([element] as Set, [[element] as Set])
 }
 ```
@@ -349,12 +349,14 @@ func makeCollection<T>(with element: T) -> (some Collection, some [Collection]) 
 異なる型を返すこともできるかもしれない(現状できないのでイメージ)
 
 ```swift
-func makeCollections<T>(with element: T) -> <C, D>(some Collection<.Element == C>, some Collection<.Element == D>) {
+func makeCollections<T>(with element: T) -> <C: Collection where .Element == T, D: Collection where .Element == T>(some C, some D) {
   return ([element] as Set, [element])
 }
 ```
 
 関連スレッド: https://forums.swift.org/t/reverse-generics-and-opaque-result-types/21608
+関連PR: https://github.com/apple/swift/pull/40715
+
 
 ### 将来的な話
 
@@ -377,4 +379,5 @@ func makeCollection(with number: some Numeric) -> some Collection {
 - https://forums.swift.org/t/se-0328-structural-opaque-result-types/53248
 - https://forums.swift.org/t/pitch-light-weight-same-type-constraint-syntax/52889
 - https://forums.swift.org/t/reverse-generics-and-opaque-result-types/21608
+- https://github.com/apple/swift/pull/40715
 - https://forums.swift.org/t/discussion-easing-the-learning-curve-for-introducing-generic-parameters/52891
