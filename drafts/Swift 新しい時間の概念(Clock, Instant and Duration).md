@@ -15,6 +15,7 @@
       - [Instantプロトコル](#instantプロトコル)
       - [DurationProtocolプロトコル](#durationprotocolプロトコル)
       - [Duration構造体](#duration構造体)
+    - [Task](#task)
     - [Clockプロトコルの具体的な実装](#clockプロトコルの具体的な実装)
       - [ContinuousClock構造体](#continuousclock構造体)
       - [SuspendingClock構造体](#suspendingclock構造体)
@@ -90,9 +91,9 @@ public protocol Clock: Sendable {
   
   var now: Instant { get }
   
-  func sleep(until deadline: Instant, tolerance: Instant.Interval?) async throws 
+  func sleep(until deadline: Instant, tolerance: Instant.Duration?) async throws 
 
-  var minimumResolution: Instant.Interval { get }
+  var minimumResolution: Instant.Duration { get }
   
   func measure(_ work: () async throws -> Void) reasync rethrows -> Duration
 }
@@ -117,19 +118,19 @@ public protocol Clock: Sendable {
 
 ```swift
 public protocol InstantProtocol: Comparable, Hashable, Sendable {
-  associatedtype Interval: DurationProtocol
-  func advanced(by duration: Interval) -> Self
-  func duration(to other: Self) -> Interval
+  associatedtype Duration: DurationProtocol
+  func advanced(by duration: Duration) -> Self
+  func duration(to other: Self) -> Duration
 }
 
 extension InstantProtocol {
-  public static func + (_ lhs: Self, _ rhs: Interval) -> Self
-  public static func - (_ lhs: Self, _ rhs: Interval) -> Self
+  public static func + (_ lhs: Self, _ rhs: Duration) -> Self
+  public static func - (_ lhs: Self, _ rhs: Duration) -> Self
   
-  public static func += (_ lhs: inout Self, _ rhs: Interval)
-  public static func -= (_ lhs: inout Self, _ rhs: Interval)
+  public static func += (_ lhs: inout Self, _ rhs: Duration)
+  public static func -= (_ lhs: inout Self, _ rhs: Duration)
   
-  public static func - (_ lhs: Self, _ rhs: Self) -> Interval
+  public static func - (_ lhs: Self, _ rhs: Self) -> Duration
 }
 ```
 
@@ -139,10 +140,10 @@ extension InstantProtocol {
 
 ```swift
 public protocol DurationProtocol: Comparable, AdditiveArithmetic, Sendable {
-  static func / <T: BinaryInteger>(_ lhs: Self, _ rhs: T) -> Self
-  static func /= <T: BinaryInteger>(_ lhs: inout Self, _ rhs: T)
-  static func * <T: BinaryInteger>(_ lhs: Self, _ rhs: T) -> Self
-  static func *= <T: BinaryInteger>(_ lhs: inout Self, _ rhs: T)
+  static func / (_ lhs: Self, _ rhs: Int) -> Self
+  static func /= (_ lhs: inout Self, _ rhs: Int)
+  static func * (_ lhs: Self, _ rhs: Int) -> Self
+  static func *= (_ lhs: inout Self, _ rhs: Int)
   
   static func / (_ lhs: Self, _ rhs: Self) -> Double
 }
@@ -181,17 +182,39 @@ extension Duration: AdditiveArithmetic { }
 extension Duration {
   public static func / (_ lhs: Duration, _ rhs: Double) -> Duration
   public static func /= (_ lhs: inout Duration, _ rhs: Double)
-  public static func / <T: BinaryInteger>(_ lhs: Duration, _ rhs: T) -> Duration
-  public static func /= <T: BinaryInteger>(_ lhs: inout Duration, _ rhs: T)
+  public static func / (_ lhs: Duration, _ rhs: Int) -> Duration
+  public static func /= (_ lhs: inout Duration, _ rhs: Int)
   public static func / (_ lhs: Duration, _ rhs: Duration) -> Double
   public static func * (_ lhs: Duration, _ rhs: Double) -> Duration
   public static func *= (_ lhs: inout Duration, _ rhs: Double)
-  public static func * <T: BinaryInteger>(_ lhs: Duration, _ rhs: T) -> Duration
-  public static func *= <T: BinaryInteger>(_ lhs: inout Duration, _ rhs: T)
+  public static func * (_ lhs: Duration, _ rhs: Int) -> Duration
+  public static func *= (_ lhs: inout Duration, _ rhs: Int)
 }
 
 extension Duration: DurationProtocol { }
 ```
+
+### Task
+
+既存の`Task.sleep`メソッドはsleepの特定の動作はないが、内部では、Darwinではcontinuous clock、Linuxではsuspending clockを使用している。
+
+これらのAPIはdeprecatedになって、下記のような新しいAPIを提供する。
+
+```swift
+extension Task {
+  @available(*, deprecated, renamed: "Task.sleep(for:)")
+  public static func sleep(_ duration: UInt64) async
+  
+  @available(*, deprecated, renamed: "Task.sleep(for:)")
+  public static func sleep(nanoseconds duration: UInt64) async throws
+  
+  public static func sleep(for: Duration) async throws
+  
+  public static func sleep<C: Clock>(until deadline: C.Instant, tolerance: C.Instant.Duration? = nil, clock: C) async throws
+}
+```
+
+※ 新しいAPIの`Task.sleep(for:)`は`ContinuousClock`を使っている。
 
 ### Clockプロトコルの具体的な実装
 
@@ -400,5 +423,5 @@ public final class ManualClock: Clock, @unchecked Sendable {
 
 ## 参考リンク
 
-- https://github.com/apple/swift-evolution/blob/523636b879cd6cab83124abc11060b6b39c3ac21/proposals/0329-clock-instant-date-duration.md
+- https://github.com/apple/swift-evolution/blob/e5cdfebdbaa576e4bc0b509cef9e4a277ece841f/proposals/0329-clock-instant-date-duration.md
 - https://github.com/apple/swift/pull/40609
