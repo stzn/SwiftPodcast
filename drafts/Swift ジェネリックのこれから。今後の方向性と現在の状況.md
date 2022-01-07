@@ -19,6 +19,10 @@
         - [問題点](#問題点-2)
         - [解決策](#解決策-1)
   - [参考リンク](#参考リンク)
+    - [Forums](#forums)
+    - [プロポーザルドキュメント](#プロポーザルドキュメント)
+    - [関連PR](#関連pr)
+    - [その他](#その他)
 
 ## 概要
 
@@ -157,8 +161,11 @@ let first = openedX[start] // X.IndexからX.Elementを取得することがで�
 
 #### 戻り値で型レベルの抽象化ができない
 
+※ これは既にSwift5.1のOpaque Return Typesによって一部解決されている。
+
 ##### 問題点
 
+上記のような問題を解決したとしても値レベルの抽象化でできないことがある。
 ジェネリックを使った場合、呼び出し側で具体的な型を指定することができる。
 
 ```swift
@@ -177,7 +184,7 @@ func evenValues<C: Collection>(in collection: C) -> Collection where C.Element =
 }
 ```
 
-しかし、現状`Collection`は型として使えない(上記でも書いたが、今後使用可能になる予定)。そこでジェネリックを使ってみる。
+しかし、現状`Collection`は型として使えない(上記でも書いたが、今後使用可能になる予定)。そこでジェネリックを使おうとすることを考えるのは自然。
 
 ```swift
 func evenValues<C: Collection, Output: Collection>(in collection: C) -> Output
@@ -187,21 +194,19 @@ func evenValues<C: Collection, Output: Collection>(in collection: C) -> Output
 }
 ```
 
-これだと呼び出し側で戻り値が決められてしまい、元の意図と違ってくる。
+これだと呼び出し側で戻り値が決められてしまい、実装側で戻り値の型を決めるという元の意図と違ってくる。
 
-解決するためには型消去(Type eraser)する必要がある。
+そこで解決するためには型消去(Type eraser)する必要があった。
 
-Standard Libraryには`AnyCollection`が用意されている。
+Standard Libraryには`AnyCollection`が用意されているので、それを使ってみる。
 
 ```swift
 func evenValues<C: Collection>(in collection: C) -> AnyCollection<Int> where C.Element == Int {
     AnyCollection<Int>(collection.lazy.filter { $0 % 2 == 0 })
 }
-```
 
-(将来的にはassociated typeを指定できるようになるかもしれない)
 
-```swift
+//将来的にはAnyCollectionはいらなくなる予定
 func evenValues<C: Collection>(in collection: C) -> CollectionOf<Int>
   where C.Element == Int
 {
@@ -209,7 +214,20 @@ func evenValues<C: Collection>(in collection: C) -> CollectionOf<Int>
 }
 ```
 
-ただし、これも正確ではなく、呼び出されるたびに異なる`Collection`型を返し、その型情報は失われている。
+ただし、これらも正確ではなく、呼び出されるたびに異なる`Collection`型を返し、その型情報は失われている。
+
+例えば、下記はいずれも`Int`だとわかっているが、型情報が失われているでの加算ができない。
+
+```swift
+
+func callee() -> Numeric {
+    Int(42)
+}
+
+func caller() {
+    callee() + callee() // ❌ Binary operator '+' cannot be applied to two 'Numeric' operands
+}
+```
 
 結局、戻り値で型レベルの抽象化が必要な可能性がある。
 
@@ -287,12 +305,26 @@ https://github.com/apple/swift/pull/40714
 
 ## 参考リンク
 
-- https://forums.swift.org/t/improving-the-ui-of-generics/22814
-- https://docs.swift.org/swift-book/LanguageGuide/Generics.html
-- https://github.com/apple/swift/blob/main/docs/GenericsManifesto.md
-- https://forums.swift.org/t/pitch-light-weight-same-type-constraint-syntax/52889
-- https://github.com/apple/swift-evolution/blob/main/proposals/0244-opaque-result-types.md
-- https://github.com/apple/swift-evolution/blob/main/proposals/0328-structural-opaque-result-types.md
-- https://forums.swift.org/t/se-0335-introduce-existential-any/53934/125
-- https://forums.swift.org/t/discussion-easing-the-learning-curve-for-introducing-generic-parameters/52891
-- https://github.com/apple/swift/pull/40715
+### Forums
+
+- [Improving the UI of generics](https://forums.swift.org/t/improving-the-ui-of-generics/22814)
+- [[Pitch] Light-weight same-type constraint syntax](https://forums.swift.org/t/pitch-light-weight-same-type-constraint-syntax/52889)
+- [SE-0335: Introduce existential any](https://forums.swift.org/t/se-0335-introduce-existential-any/53934/125)
+- [[Discussion] Easing the learning curve for introducing generic parameters](https://forums.swift.org/t/discussion-easing-the-learning-curve-for-introducing-generic-parameters/52891)
+
+### プロポーザルドキュメント
+
+- [Opaque Result Types](https://github.com/apple/swift-evolution/blob/main/proposals/0244-opaque-result-types.md)
+- [Structural opaque result types](https://github.com/apple/swift-evolution/blob/main/proposals/0328-structural-opaque-result-types.md)
+- [Unlock existential for all protocols](https://github.com/apple/swift-evolution/blob/main/proposals/0309-unlock-existential-types-for-all-protocols.md)
+- [Introduce existential any](https://github.com/apple/swift-evolution/blob/main/proposals/0335-existential-any.md)
+
+### 関連PR
+
+- [Structural opaque result types](https://github.com/apple/swift/pull/40710)
+- [Named opaque result types](https://github.com/apple/swift/pull/40715)
+
+### その他
+
+- [LanguageGuide Generics](https://docs.swift.org/swift-book/LanguageGuide/Generics.html)
+- [GenericsManifesto](https://github.com/apple/swift/blob/main/docs/GenericsManifesto.md)
