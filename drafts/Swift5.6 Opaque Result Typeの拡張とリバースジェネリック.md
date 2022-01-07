@@ -26,6 +26,9 @@
       - [より複雑な型も同じように扱える](#より複雑な型も同じように扱える)
     - [将来的な話](#将来的な話)
   - [参考リンク](#参考リンク)
+    - [Forums](#forums)
+    - [プロポーザルドキュメント](#プロポーザルドキュメント)
+    - [関連PR](#関連pr)
 
 ## 概要
 
@@ -317,7 +320,7 @@ func makeCollection<T>(with element: T) -> some Collection where Collection.Elem
 }
 ```
 
-これができるとか下記ができる。
+これができると下記ができる。
 
 ```swift
 let c = makeCollection(with: 5)
@@ -374,10 +377,18 @@ func makeCollection(with number: some Numeric) -> some Collection {
 
 ## 参考リンク
 
-- https://github.com/apple/swift-evolution/blob/main/proposals/0244-opaque-result-types.md
-- https://github.com/apple/swift-evolution/blob/main/proposals/0328-structural-opaque-result-types.md
-- https://forums.swift.org/t/se-0328-structural-opaque-result-types/53248
-- https://forums.swift.org/t/pitch-light-weight-same-type-constraint-syntax/52889
-- https://forums.swift.org/t/reverse-generics-and-opaque-result-types/21608
-- https://github.com/apple/swift/pull/40715
-- https://forums.swift.org/t/discussion-easing-the-learning-curve-for-introducing-generic-parameters/52891
+### Forums
+
+- [Structural opaque result types](https://forums.swift.org/t/se-0328-structural-opaque-result-types/53248)
+- [Reverse generics and opaque result types](https://forums.swift.org/t/reverse-generics-and-opaque-result-types/21608)
+- [[Pitch] Light-weight same-type constraint syntax](https://forums.swift.org/t/pitch-light-weight-same-type-constraint-syntax/52889)
+- [[Discussion] Easing the learning curve for introducing generic parameters](https://forums.swift.org/t/discussion-easing-the-learning-curve-for-introducing-generic-parameters/52891)
+
+### プロポーザルドキュメント
+
+- [Opaque Result Types](https://github.com/apple/swift-evolution/blob/main/proposals/0244-opaque-result-types.md)
+- [Structural opaque result types](https://github.com/apple/swift-evolution/blob/main/proposals/0328-structural-opaque-result-types.md)
+
+### 関連PR
+
+- [Structural opaque result types](https://github.com/apple/swift/pull/40710)
