@@ -6,7 +6,7 @@
     - [ジェネリックとは？](#ジェネリックとは)
     - [Generics Manifesto](#generics-manifesto)
     - [用語紹介](#用語紹介)
-      - [型レベルの抽象化(ジェネリック)](#型レベルの抽象化ジェネリック)
+      - [型レベルの抽象化(ジェネリック制約)](#型レベルの抽象化ジェネリック制約)
       - [値レベルの抽象化(存在型)](#値レベルの抽象化存在型)
     - [Generics Manifestoで足りないもの、再考の余地があるもの](#generics-manifestoで足りないもの再考の余地があるもの)
       - [値レベルの抽象化の制限](#値レベルの抽象化の制限)
@@ -49,7 +49,7 @@ Swift 3 リリース時のSwiftのジェネリックの足りない機能や改
 
 ### 用語紹介
 
-#### 型レベルの抽象化(ジェネリック)
+#### 型レベルの抽象化(ジェネリック制約)
 
 特定のインスタンスで使用されている特定の型情報を保持しつつ、特定の制約に準拠する任意の型を使って共通の関数または型を使用できる
 
@@ -309,7 +309,8 @@ https://github.com/apple/swift/pull/40714
 
 - [Improving the UI of generics](https://forums.swift.org/t/improving-the-ui-of-generics/22814)
 - [[Pitch] Light-weight same-type constraint syntax](https://forums.swift.org/t/pitch-light-weight-same-type-constraint-syntax/52889)
-- [SE-0335: Introduce existential any](https://forums.swift.org/t/se-0335-introduce-existential-any/53934/125)
+- [SE-0335: Introduce existential any](https://forums.swift.org/t/se-0335-introduce-existential-any/53934)
+- [[Accepted with modifications] SE-0335: Introduce existential any](https://forums.swift.org/t/accepted-with-modifications-se-0335-introduce-existential-any/54504)
 - [[Discussion] Easing the learning curve for introducing generic parameters](https://forums.swift.org/t/discussion-easing-the-learning-curve-for-introducing-generic-parameters/52891)
 
 ### プロポーザルドキュメント
