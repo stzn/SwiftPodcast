@@ -15,14 +15,19 @@
       - [Instantプロトコル](#instantプロトコル)
       - [DurationProtocolプロトコル](#durationprotocolプロトコル)
       - [Duration構造体](#duration構造体)
-    - [Task](#task)
     - [Clockプロトコルの具体的な実装](#clockプロトコルの具体的な実装)
       - [ContinuousClock構造体](#continuousclock構造体)
       - [SuspendingClock構造体](#suspendingclock構造体)
     - [Standard Library以外のClock実装](#standard-library以外のclock実装)
       - [UTCClock構造体](#utcclock構造体)
     - [Swift ConcurrencyでClockの利用](#swift-concurrencyでclockの利用)
+      - [Task](#task)
+      - [Custom Clockの例: Manual Clock](#custom-clockの例-manual-clock)
   - [参考リンク](#参考リンク)
+    - [Forums](#forums)
+    - [プロポーザルドキュメント](#プロポーザルドキュメント)
+    - [関連PR](#関連pr)
+    - [その他](#その他)
 
 ## 概要
 
@@ -101,7 +106,15 @@ public protocol Clock: Sendable {
 
 `associatedtype`に、ある瞬間を表す`Instant`プロトコル(後述)に準拠した型を持つので、`Clock`と`Instant`は紐づいている。そのため、ある`Clock`のインスタンスと他の`Clock`の`Instant`を比較することはできず、`Clock`間での境界が維持されるようになっている。ただし、既存のAPIと新しいAPI間のやり取りをスムーズにするためや使いやすさという点で、2つの`Instant`間の期間はどんな`Clock`でも比較することができるようになっている(`Duration`という構造体を返す)。ただし使い方を間違えないように注意する必要がある。
 
-時間の精度を調整することもできる。ある`Clock`はナノ秒単位の精度を持つし、ある`Clock`はマイクロ秒単位での精度を持つ。デフォルトは1ナノ秒。経過時間が指定している精度以下の場合は0になる。
+時間の精度を調整することもできる。ある`Clock`はナノ秒単位の精度を持つし、ある`Clock`はマイクロ秒単位での精度を持つ。デフォルトは1ナノ秒(`.nanosecond(1)`)。経過時間が指定している精度以下の場合は、正確な情報を提供できない。
+
+`Clock`はある作業の量を測定するためにも使われる。つまり、`Clock`には、メトリックのワークロードを測定するだけでなく、パフォーマンスベンチマークのワークロードも測定できるようにするための拡張機能が必要になる。そのため、それを簡単に行えるようにする。
+
+```swift
+let elapsed = someClock.measure {
+  someWorkToBenchmark()
+}
+```
 
 与えられた瞬間の後にウェークアップするには`sleep`メソッドを使う。ただし、あまり頻繁にやりすぎるとシステムのリソースを使いすぎる可能性もあるので、システムが起動するまでの遅延が許容できる範囲を示す`tolerance`を指定できる。
 
@@ -149,6 +162,8 @@ public protocol DurationProtocol: Comparable, AdditiveArithmetic, Sendable {
 }
 ```
 
+このプロトコル定義は、ベクトル空間の概念に非常に近い。将来的に`Comparable`と`AdditiveArithmetic`の組み合わたより洗練されたプロトコル定義が登場したら、このプロトコルは改善を検討する余地がある。
+
 #### Duration構造体
 
 「期間」を表す`DurationProtocol`の具体的な実装。全ての`Clock`で使われている。参照時点からの過去と未来をナノ秒と秒で表現する。人間の測定値（または機械で測定された精度）から構築できるが、カレンダーの概念(日、月、年など)は持たない。
@@ -193,28 +208,6 @@ extension Duration {
 
 extension Duration: DurationProtocol { }
 ```
-
-### Task
-
-既存の`Task.sleep`メソッドはsleepの特定の動作はないが、内部では、Darwinではcontinuous clock、Linuxではsuspending clockを使用している。
-
-これらのAPIはdeprecatedになって、下記のような新しいAPIを提供する。
-
-```swift
-extension Task {
-  @available(*, deprecated, renamed: "Task.sleep(for:)")
-  public static func sleep(_ duration: UInt64) async
-  
-  @available(*, deprecated, renamed: "Task.sleep(for:)")
-  public static func sleep(nanoseconds duration: UInt64) async throws
-  
-  public static func sleep(for: Duration) async throws
-  
-  public static func sleep<C: Clock>(until deadline: C.Instant, tolerance: C.Instant.Duration? = nil, clock: C) async throws
-}
-```
-
-※ 新しいAPIの`Task.sleep(for:)`は`ContinuousClock`を使っている。
 
 ### Clockプロトコルの具体的な実装
 
@@ -341,9 +334,33 @@ extension Clock where Self == UTCClock {
 
 ### Swift ConcurrencyでClockの利用
 
-Swift ConcurrencyのTask.sleepメソッドなどに`Clock`を引数に取ることができようになり、スケジュールのコントロールがより簡単に。
+#### Task
 
-例えば、`Manual Clock`を使ってテスト時のスケジューリングが簡単になる。
+既存の`Task.sleep`メソッドはsleepの特定の動作はないが、内部では、Darwinではcontinuous clock、Linuxではsuspending clockを使用している。
+
+これらのAPIはdeprecatedになって、下記のような新しいAPIを提供する。
+
+```swift
+extension Task {
+  @available(*, deprecated, renamed: "Task.sleep(for:)")
+  public static func sleep(_ duration: UInt64) async
+  
+  @available(*, deprecated, renamed: "Task.sleep(for:)")
+  public static func sleep(nanoseconds duration: UInt64) async throws
+  
+  public static func sleep(for: Duration) async throws
+  
+  public static func sleep<C: Clock>(until deadline: C.Instant, tolerance: C.Instant.Duration? = nil, clock: C) async throws
+}
+```
+
+※ 新しいAPIの`Task.sleep(for:)`は`ContinuousClock`を使っている。
+
+#### Custom Clockの例: Manual Clock
+
+上記のTask.sleepメソッドに`Clock`を引数に取ることができようになり、スケジュールのコントロールがより簡単になる。
+
+例えば、下記のようなCustom Clockを使ってテスト時のスケジューリングができるようになる。
 
 ```swift
 
@@ -423,5 +440,21 @@ public final class ManualClock: Clock, @unchecked Sendable {
 
 ## 参考リンク
 
-- https://github.com/apple/swift-evolution/blob/e5cdfebdbaa576e4bc0b509cef9e4a277ece841f/proposals/0329-clock-instant-date-duration.md
+### Forums
+
+- [SE-0329: Clock, Instant, Date, and Duration](https://forums.swift.org/t/se-0329-clock-instant-date-and-duration/53309)
+- [[Pitch (back from revision)] Clock, Instant, and Duration](https://forums.swift.org/t/pitch-back-from-revision-clock-instant-and-duration/54035)
+- [SE-0329 (Second Review): Clock, Instant, and Duration](https://forums.swift.org/t/se-0329-second-review-clock-instant-and-duration/54509)
+
+### プロポーザルドキュメント
+
+- [Clock, Instant, and Duration](https://github.com/apple/swift-evolution/blob/main/proposals/0329-clock-instant-date-duration.md)
+
+### 関連PR
+
 - https://github.com/apple/swift/pull/40609
+
+### その他
+
+- [Foundation Date](https://developer.apple.com/documentation/foundation/date)
+- [Dispatch DispatchTime](https://developer.apple.com/documentation/dispatch/dispatchtime/)
