@@ -375,6 +375,9 @@ func makeCollection(with number: some Numeric) -> some Collection {
 
 関連スレッド: https://forums.swift.org/t/discussion-easing-the-learning-curve-for-introducing-generic-parameters/52891#type-parameter-inference-via-some-4
 
+他の残りのタスクについてのスレッドもある(備忘録的な？)
+関連スレッド: https://forums.swift.org/t/future-work-on-opaque-result-types/50999
+
 ## 参考リンク
 
 ### Forums
@@ -383,6 +386,7 @@ func makeCollection(with number: some Numeric) -> some Collection {
 - [Reverse generics and opaque result types](https://forums.swift.org/t/reverse-generics-and-opaque-result-types/21608)
 - [[Pitch] Light-weight same-type constraint syntax](https://forums.swift.org/t/pitch-light-weight-same-type-constraint-syntax/52889)
 - [[Discussion] Easing the learning curve for introducing generic parameters](https://forums.swift.org/t/discussion-easing-the-learning-curve-for-introducing-generic-parameters/52891)
+- [Future work on opaque result types](https://forums.swift.org/t/future-work-on-opaque-result-types/50999)
 
 ### プロポーザルドキュメント
 
