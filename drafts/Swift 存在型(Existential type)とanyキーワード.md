@@ -11,7 +11,7 @@
     - [解決案](#解決案)
     - [anyの使い方](#anyの使い方)
       - [`struct`や`enum`、`tuple`や関数、ジェネリックの型パラメータやプロトコル自身のメタタイプに使えない](#structやenumtupleや関数ジェネリックの型パラメータやプロトコル自身のメタタイプに使えない)
-      - [プロトコル合成以外のAnyとAnyObjectにはanyが不要(ワーニング)](#プロトコル合成以外のanyとanyobjectにはanyが不要ワーニング)
+      - [プロトコル合成以外のAnyとAnyObjectにはanyが不要](#プロトコル合成以外のanyとanyobjectにはanyが不要)
       - [メタタイプ](#メタタイプ)
       - [タイプエイリアスとassociated type](#タイプエイリアスとassociated-type)
     - [Swift6への移行](#swift6への移行)
@@ -20,6 +20,8 @@
       - [Existential typeの拡張](#existential-typeの拡張)
       - [プレーンなプロトコル名の転用](#プレーンなプロトコル名の転用)
   - [参考リンク](#参考リンク)
+    - [Forums](#forums)
+    - [プロポーザルドキュメント](#プロポーザルドキュメント)
 
 ## 概要
 
@@ -138,22 +140,22 @@ func generic<T>(t: T) {
 let f: any ((Int) -> Void) = generic // ❌ error: 'any' has no effect on concrete type '(Int) -> Void'
 ```
 
-#### プロトコル合成以外のAnyとAnyObjectにはanyが不要(ワーニング)
+#### プロトコル合成以外のAnyとAnyObjectにはanyが不要
 
-`Any`と`AnyObject`はすでに存在型だと明白なので2度デマになる。
+`Any`と`AnyObject`はすでに存在型だと明白なので2度デマになるため。ただし、付けてもワーニングなどは出ない。(Accepted時に変更された)
 
 ```swift
 struct S {}
 class C {}
  
-let value: any Any = S() // ⚠️ warning: 'any' is redundant on type 'Any'
-let values: [any Any] = [] // ⚠️ warning: 'any' is redundant on type 'Any'
-let object: any AnyObject = C() // ⚠️ warning: 'any' is redundant on type 'AnyObject'
+let value: any Any = S() 
+let values: [any Any] = []
+let object: any AnyObject = C()
  
 protocol P {}
 extension C: P {}
  
-let pObject: any AnyObject & P = C() // ⭕️ okay
+let pObject: any AnyObject & P = C()
 ```
 
 #### メタタイプ
@@ -217,7 +219,7 @@ struct S2: Requirements {
 
 ### Swift6への移行
 
-migratorで自動で変換される予定。
+未定。migratorで自動で変換されるという記載はある、
 
 ### Swift5から導入する理由
 
@@ -266,5 +268,13 @@ extension Array {
 
 ## 参考リンク
 
-- https://github.com/apple/swift-evolution/blob/main/proposals/0335-existential-any.md
-- https://github.com/apple/swift-evolution/blob/main/proposals/0309-unlock-existential-types-for-all-protocols.md
+### Forums
+
+- [[Pitch] Introduce existential any](https://forums.swift.org/t/pitch-introduce-existential-any/53520)
+- [SE-0335: Introduce existential any](https://forums.swift.org/t/se-0335-introduce-existential-any/53934)
+- [[Accepted with modifications] SE-0335: Introduce existential any](https://forums.swift.org/t/accepted-with-modifications-se-0335-introduce-existential-any/54504)
+
+### プロポーザルドキュメント
+
+- [Introduce existential any](https://github.com/apple/swift-evolution/blob/main/proposals/0335-existential-any.md)
+- [Unlock existential for all protocols](https://github.com/apple/swift-evolution/blob/main/proposals/0309-unlock-existential-types-for-all-protocols.md)
