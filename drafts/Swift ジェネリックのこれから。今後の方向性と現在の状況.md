@@ -8,17 +8,17 @@
     - [用語紹介](#用語紹介)
       - [型レベルの抽象化(ジェネリック制約)](#型レベルの抽象化ジェネリック制約)
       - [値レベルの抽象化(存在型)](#値レベルの抽象化存在型)
-  - [Swiftのジェネリックにはどちらもプロトコルが使われている](#swiftのジェネリックにはどちらもプロトコルが使われている)
-    - [Generics Manifestoで足りないもの、再考の余地があるもの](#generics-manifestoで足りないもの再考の余地があるもの)
+      - [Swiftのジェネリックにはどちらもプロトコルが使われている](#swiftのジェネリックにはどちらもプロトコルが使われている)
+    - [ジェネリックの改善に必要なこと](#ジェネリックの改善に必要なこと)
       - [値レベルの抽象化の制限](#値レベルの抽象化の制限)
         - [問題点](#問題点)
         - [解決案](#解決案)
       - [戻り値で型レベルの抽象化ができない](#戻り値で型レベルの抽象化ができない)
         - [問題点](#問題点-1)
         - [解決策](#解決策)
-      - [ジェネリックの書き方が複雑](#ジェネリックの書き方が複雑)
+      - [ジェネリック制約の書き方が複雑](#ジェネリック制約の書き方が複雑)
         - [問題点](#問題点-2)
-        - [解決策](#解決策-1)
+        - [解決案](#解決案-1)
   - [参考リンク](#参考リンク)
     - [Forums](#forums)
     - [プロポーザルドキュメント](#プロポーザルドキュメント)
@@ -35,6 +35,8 @@ Generics Manifestoでまだ未実装の部分の実装を進めるにあたっ�
 ## 内容
 
 ※今回は全体の概要を紹介して、個々の具体的な機能については別途
+
+※ 下記で登場するコードの多くはイメージで実際のコードとは異なります。
 
 ### ジェネリックとは？
 
@@ -86,13 +88,13 @@ var dog: Animal = Dog()
 dog = Cat() // ok
 ```
 
-## Swiftのジェネリックにはどちらもプロトコルが使われている
+#### Swiftのジェネリックにはどちらもプロトコルが使われている
 
 Swiftでは、型レベルの抽象化、値レベルの抽象化のどちらにもプロトコルが使われている。
 
 ※ このことが誤用を招いたり、理解を難しくしているとされ、下記に紹介する問題の一つとなっている。
 
-### Generics Manifestoで足りないもの、再考の余地があるもの
+### ジェネリックの改善に必要なこと
 
 `Collection`プロトコルを使って考えてみる。
 
@@ -119,7 +121,7 @@ func bar(x: Collection, y: Collection) -> [Collection] { ... }
 // Indexの型がわからないので型安全ではない
 var start = x.startIndex
 
-// 別の方に変更できてしまう可能性がある
+// 別の型に変更できてしまう可能性がある
 // start = y.startIndex
 var firstValue = x[start] // error
 
@@ -151,8 +153,8 @@ func bar<T>(x: CollectionOf<T>, y: CollectionOf<T>) -> [CollectionOf<T>] { ... }
 そこで存在型にある制約を加えてそのプロトコル自身に準拠できるようにする。
 
 ```swift
-extension Collection: Collection {
-  // Comparableに準拠した任意の方を引数に値を取得する
+extension any Collection: Collection {
+  // Comparableに準拠した任意の型を引数に値を取得する
   subscript(index: Comparable) -> Any {
     // Indexは現在のCollectionのIndexの型と合致していることは事前にわかっているので
     // キャストしてそのCollectionの型にキャストすることができる
@@ -166,8 +168,6 @@ extension Collection: Collection {
 - 存在型から具体的な型へ「展開」できるようにする
 
 ローカル変数に再代入する際に、具体的な型として再度利用できるようにする。こうすることで、単一の存在型の関連型を使った処理ができる。
-
-※ シンタックスは未定
 
 ```swift
 let <X: Collection> openedX = x // Xはxの動的な型に紐づく
@@ -183,7 +183,7 @@ let first = openedX[start] // X.IndexからX.Elementを取得することがで�
 
 ##### 問題点
 
-ジェネリックを使った場合、呼び出し側で具体的な型を指定することができる。
+例えば、ジェネリック制約を使った場合は、型を抽象化して関数を定義しても、呼び出し側で具体的な型を特定することができる。
 
 ```swift
 func zim<T: P>() -> T { ... }
@@ -201,7 +201,7 @@ func evenValues<C: Collection>(in collection: C) -> Collection where C.Element =
 }
 ```
 
-しかし、現状`Collection`は型として使えない(上記でも書いたが、今後使用可能になる予定)。そこでジェネリックを使おうとすることを考えるのは自然。
+しかし、現状`Collection`は型として使えない(上記でも書いたが、今後使用可能になる予定)。そこでジェネリック制約を使おうとすることを考える。
 
 ```swift
 func evenValues<C: Collection, Output: Collection>(in collection: C) -> Output
@@ -211,9 +211,9 @@ func evenValues<C: Collection, Output: Collection>(in collection: C) -> Output
 }
 ```
 
-これだと呼び出し側で戻り値が決められてしまい、実装側で戻り値の型を決めるという元の意図と違ってくる。
+これだと呼び出し側で戻り値が決められてしまい、実装側の意図と戻り値の型が異なる可能性もある。
 
-そこで解決するためには型消去(Type eraser)する必要があった。
+そこで解決するためには型消去(Type eraser)する必要がある。
 
 Standard Libraryには`AnyCollection`が用意されているので、それを使ってみる。
 
@@ -223,7 +223,7 @@ func evenValues<C: Collection>(in collection: C) -> AnyCollection<Int> where C.E
 }
 
 
-//将来的にはAnyCollectionはいらなくなる予定
+//補足: 将来的にはAnyCollectionはいらなくなる予定
 func evenValues<C: Collection>(in collection: C) -> CollectionOf<Int>
   where C.Element == Int
 {
@@ -246,7 +246,7 @@ func caller() {
 }
 ```
 
-結局、戻り値で型レベルの抽象化が必要な可能性がある。
+結局、戻り値で型レベルの抽象化が必要な場合がある。
 
 ##### 解決策
 
@@ -258,16 +258,14 @@ func caller() {
 
 ※ これは別で取り上げる。この際にリーバースジェネリクスというより広い概念についても紹介する。
 
-#### ジェネリックの書き方が複雑
+#### ジェネリック制約の書き方が複雑
 
 ##### 問題点
 
-Swiftでは、プロトコルを使ってジェネリックも存在型も実現している。そのため、この両方に使い方が不明瞭になりがちであったり、ジェネリックの書き方が存在型に比べて複雑で、不必要な場所で存在型を導入して余計なコストを費やしている場合がある。
-
 例えば、
 
-- ジェネリックのシンタックスはかっこだらけ。型変数に型を指定しなければならない。
-- 具体的な実装からジェネリックを使った抽象化をするのが難しい。
+- 具体的な実装からジェネリック制約を使った抽象化をするのが難しい
+- どの制約がどこに対する制約に行なっているのかがわかりづらい(where句)
 
 ```swift
 func concatenate(a: [Int], b: [Int]) -> [Int] {
@@ -298,11 +296,28 @@ func concatenate<A: Collection, B: Collection>(a: A, b: B) -> [A.Element]
 }
 ```
 
-##### 解決策
+これによって、他の問題を引き起こしている可能性がある。
+Swiftでは、プロトコルを使ってジェネリック制約も存在型も実装している。そのため、この両方に使い方が不明瞭になりがちで、ジェネリック制約の書き方が存在型に比べて複雑であることから不必要な場所で存在型を導入して余計なコストを費やしている場合がある。また実装側がジェネリック制約を使っているつもりが、意図しない形で存在型を使用してしまっている可能性もある。
+
+```swift
+
+func foo<T: Collection, U: Collection>(x: T, y: U) -> <V: Collection> V
+
+func foo(x: Collection, y: Collection) -> Collection
+```
+
+##### 解決案
+
+- 型変数をなくす
+
+型変数をなくして引数や戻り値に直接「ある条件に準拠する具体的な型」を指定できるようにする。Opaque Result Typesと一緒に導入された`some`キーワードを利用することなどが検討されている。
+
+```swift
+
+func concatenate(a: some Collection, b: some Collection) -> some Collection
+```
 
 - 引数や戻り値に直接制約を書けるようにしたい  
-
-※ シンタックスは未定
 
 ```swift
 func concatenate<T>(a: some Collection<.Element == T>, b: some Collection<.Element == T>)
@@ -311,14 +326,15 @@ func concatenate<T>(a: some Collection<.Element == T>, b: some Collection<.Eleme
 
 関連スレッド: https://forums.swift.org/t/discussion-easing-the-learning-curve-for-introducing-generic-parameters/52891
 
-関連PR:
-https://github.com/apple/swift/pull/40715
+関連PR:  
+https://github.com/apple/swift/pull/40715  
 https://github.com/apple/swift/pull/40714
 
 - 存在型を使っていることを明確にして誤用を防ぎたい  
 ※ これは別で取り上げる
 
-関連スレッド: https://forums.swift.org/t/se-0335-introduce-existential-any/53934/125  
+関連スレッド:  
+https://forums.swift.org/t/se-0335-introduce-existential-any/53934/125  
 
 ## 参考リンク
 
