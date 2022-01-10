@@ -1,6 +1,5 @@
 # Swift5.6 Opaque Result Typeの拡張とリバースジェネリック
 
-<!-- 最後にTable of Contentsを入れる -->
 - [Swift5.6 Opaque Result Typeの拡張とリバースジェネリック](#swift56-opaque-result-typeの拡張とリバースジェネリック)
   - [概要](#概要)
   - [内容](#内容)
@@ -18,7 +17,7 @@
       - [通常のジェネリックとリバースジェネリック比較](#通常のジェネリックとリバースジェネリック比較)
         - [ジェネリック型Tについて見てみると、callerとcallee関数の役割が**逆になった(Reverseした)**](#ジェネリック型tについて見てみるとcallerとcallee関数の役割が逆になったreverseした)
         - [ジェネリック型の参照先が異なる](#ジェネリック型の参照先が異なる)
-        - [どっちの関数(caller or caller)がジェネリックになるかが異なる](#どっちの関数caller-or-callerがジェネリックになるかが異なる)
+        - [どっちの関数(caller or callee)がジェネリックになるかが異なる](#どっちの関数caller-or-calleeがジェネリックになるかが異なる)
         - [ジェネリック型は具体的な型のプレースホルダなのは共通](#ジェネリック型は具体的な型のプレースホルダなのは共通)
         - [特殊化(Specialization)](#特殊化specialization)
       - [通常のジェネリックとリバースジェネリックの組み合わせ](#通常のジェネリックとリバースジェネリックの組み合わせ)
@@ -29,6 +28,7 @@
     - [Forums](#forums)
     - [プロポーザルドキュメント](#プロポーザルドキュメント)
     - [関連PR](#関連pr)
+    - [その他](#その他)
 
 ## 概要
 
@@ -42,6 +42,7 @@ Swift5.1で導入されたOpaque Result Typeが構造的位置(structural positi
 ### Opaque Result Typeとは？
 
 Opaque Typeとは、具体的な型の情報を保持しつつ、具体的な型からは抽象化された方法で提供される型。  
+
 https://docs.swift.org/swift-book/LanguageGuide/OpaqueTypes.html
 
 Opaque Typeを関数やsubscriptの戻り値、変数の型に使用したものをOpaque Result Typeと呼ぶ。こうすることで、関数の呼び出し側からは抽象化された方法で、関数の実装側で返す値の型を選択できる。
@@ -194,10 +195,10 @@ func caller() {
 
 上記の関数では、
 
-- 通常のジェネリック: **caller**関数が具体的な型のIntを使って処理をする。**callee**関数はあるNumericプロトコルに準拠した型を使って処理をする。
-- リバースジェネリック: **callee**関数が具体的な型のIntを使って処理をする。**caller**関数はあるNumericプロトコルに準拠した型を使って処理をする。
+- 通常のジェネリック: **`caller`**関数が具体的な型のIntを使って処理をする。**`callee`**関数はあるNumericプロトコルに準拠した型を使って処理をする。
+- リバースジェネリック: **`callee`**関数が具体的な型のIntを使って処理をする。**`caller`**関数はあるNumericプロトコルに準拠した型を使って処理をする。
 
-※ 下記はcaller関数で具体的な型を決められないため正しく機能しない
+※ 下記は`caller`関数で具体的な型を決められないため正しく機能しない
 
 ```swift
 
@@ -237,10 +238,10 @@ func caller() {
 }
 ```
 
-##### どっちの関数(caller or caller)がジェネリックになるかが異なる
+##### どっちの関数(caller or callee)がジェネリックになるかが異なる
 
-- 通常のジェネリック: 関数はジェネリックの型パラメータに対してジェネリックである(callee関数はTに対してジェネリック)
-- リバースジェネリック: ジェネリックなのは関数自体ではなく、callerがジェネリックになる(caller関数はcallee.Tに対してジェネリック)
+- 通常のジェネリック: 関数はジェネリックの型パラメータに対してジェネリックである(`callee`関数はTに対してジェネリック)
+- リバースジェネリック: ジェネリックなのは関数自体ではなく、`caller`がジェネリックになる(`caller`関数は`callee.T`に対してジェネリック)
 
 ##### ジェネリック型は具体的な型のプレースホルダなのは共通
 
@@ -268,7 +269,7 @@ func callee() -> some T {
 }
 ```
 
-つまり、caller関数はcallee.Tが突然違う型になることはないということに依存している。
+つまり、caller関数は`callee.T`が突然違う型になることはないということに依存している。
 
 ```swift
 // リバースジェネリック
@@ -279,12 +280,12 @@ func caller() {
 }
 ```
 
-※ これは存在型(Existential type)との重要な違い。存在型は毎回型が異なる可能性があるため、仮にcallee関数が存在型を返した場合は、xとyは直接加算できない(動的にキャストする必要がある)。
+※ これは存在型(Existential type)との重要な違い。存在型は毎回型が異なる可能性があるため、仮に`callee`関数が存在型を返した場合は、xとyは直接加算できない(動的にキャストする必要がある)。
 
 ##### 特殊化(Specialization)
 
 通常のジェネリックの場合、コンパイラは具体的な型がわかる場合、コンパイル時にジェネリック型を具体的な型に置き換える。
-リバースジェネリックでも同じだが、ジェネリックなのはcalleeではなく、callerであるため、コンパイラが十分な情報を持っている場合は、callerが特殊化される。つまり、もしそれぞの関数が別のモジュールに存在する場合、callee関数から戻ってくる具体的な型の情報がわからないため、コンパイラは特殊化ができない(インライン化については今回考えない)。
+リバースジェネリックでも同じだが、ジェネリックなのは`callee`ではなく、callerであるため、コンパイラが十分な情報を持っている場合は、callerが特殊化される。つまり、もしそれぞの関数が別のモジュールに存在する場合、`callee`関数から戻ってくる具体的な型の情報がわからないため、コンパイラは特殊化ができない(インライン化については今回考えない)。
 
 #### 通常のジェネリックとリバースジェネリックの組み合わせ
 
@@ -299,9 +300,9 @@ func makeCollection<T>(with element: T) -> some Collection {
 
 中身を見ていくと、
 
-- `makeCollection`関数は引数で受け取るTの具体的な型はわからない。`T`はcallerによって決められる。
-- callerは戻り値の具体的な型がわからない。`makeCollection`関数が決める。
-- callerは`some Collection`型が`Collection`に準拠していることはわかるため、`count`や`isEmpty`などのAPIを使用できる。
+- `makeCollection`関数は引数で受け取るTの具体的な型はわからない。`T`は`caller`によって決められる。
+- `caller`は戻り値の具体的な型がわからない。`makeCollection`関数が決める。
+- `caller`は`some Collection`型が`Collection`に準拠していることはわかるため、`count`や`isEmpty`などのAPIを使用できる。
 
 気になる点として、`makeCollection`関数が返す型は、引数に`Int`を渡すと`Int`の配列、引数に`String`を渡すと`String`の配列を返す。これは、上記で話した内容と一致しない。ちょっとあいまいだが、リバースジェネリックの型は通常のジェネリックの型に応じて固定されていると言える。つまり、毎回引数の型が`Int`で呼び出す場合、`makeCollection`関数が返す具体的な型はいつも同じである。
 なので下記は機能する。
@@ -312,7 +313,7 @@ let c = makeCollection(with: 5) + makeCollection(with: 10)
 
 #### where句を使った型制約も同じように設定できる(可能性がある)
 
-これまで使っていたwhere句でも型制約を設定できるがより複雑になる可能性がある。例えば、上記の関数は、callerが引数に渡した型が必ず返ってくる保証はない。これをwhere句で制約を追加する。
+これまで使っていたwhere句でも型制約を設定できるがより複雑になる可能性がある。例えば、上記の関数は、`caller`が引数に渡した型が必ず返ってくる保証はない。これをwhere句で制約を追加する。
 
 ```swift
 func makeCollection<T>(with element: T) -> some Collection where Collection.Element == T {
@@ -357,13 +358,14 @@ func makeCollections<T>(with element: T) -> <C: Collection where .Element == T, 
 }
 ```
 
-関連スレッド: https://forums.swift.org/t/reverse-generics-and-opaque-result-types/21608
+関連スレッド: https://forums.swift.org/t/reverse-generics-and-opaque-result-types/21608  
 関連PR: https://github.com/apple/swift/pull/40715
-
 
 ### 将来的な話
 
-Opaque Result Typesで使われている`some`キーワードの意味を広げて「匿名のジェネリック型」として関数の引数にも使えるようにしようとしている。
+この拡張は汎用的なリバースジェネリックに向けたステップアップ。
+
+より直感的な書き方ができるように`some`キーワードを引数でも利用できるようにしたり、関連型(associated type)の制約をOpaque Result Typesと一緒に書けるようにすることなどが検討されている。
 
 ```swift
 func makeCollection(with number: some Numeric) -> some Collection {
@@ -371,11 +373,27 @@ func makeCollection(with number: some Numeric) -> some Collection {
 }
 ```
 
-※ この場合、引数の型は`makeCollection`関数のcallerで決められる。
+関連スレッド:  
+- https://forums.swift.org/t/discussion-easing-the-learning-curve-for-introducing-generic-parameters/
 
-関連スレッド: https://forums.swift.org/t/discussion-easing-the-learning-curve-for-introducing-generic-parameters/52891#type-parameter-inference-via-some-4
 
-他の残りのタスクについてのスレッドもある(備忘録的な？)
+```swift
+func concatenate<T>(a: some Collection<.Element == T>, b: some Collection<.Element == T>) -> some Collection<.Element == T>
+```
+
+もっと簡単に書く方法なども。
+
+```swift
+func concatenate<T>(a: some Collection<T>, b: some Collection<T>) -> some Collection<T>
+```
+
+関連スレッド:  
+
+- https://forums.swift.org/t/pitch-light-weight-same-type-constraint-syntax/52889
+
+
+Opaque Result Typesについて残りのタスクについての記載もある  
+
 関連スレッド: https://forums.swift.org/t/future-work-on-opaque-result-types/50999
 
 ## 参考リンク
@@ -396,3 +414,7 @@ func makeCollection(with number: some Numeric) -> some Collection {
 ### 関連PR
 
 - [Structural opaque result types](https://github.com/apple/swift/pull/40710)
+
+### その他
+
+- [LanguageGuide Opaque Types](https://docs.swift.org/swift-book/LanguageGuide/OpaqueTypes.html)
