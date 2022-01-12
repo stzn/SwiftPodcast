@@ -174,6 +174,9 @@ func graphemeBreakPropertyData(
 
 #### Regexリテラル
 
+TODO: ここは見直しが入って大きく変更される可能性が高いので更新が必要  
+https://github.com/apple/swift-experimental-string-processing/issues/63
+
 こういった文字列のパターンマッチやデータを抽出する一般的な方法として正規表現がある。そこで正規表現をパースして静的な型として扱う機能をSwiftに追加する。
 
 Swiftの正規表現ではPCREシンタックス(※)をサポートする。
