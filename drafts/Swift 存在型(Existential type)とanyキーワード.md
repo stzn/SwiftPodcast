@@ -22,6 +22,7 @@
   - [参考リンク](#参考リンク)
     - [Forums](#forums)
     - [プロポーザルドキュメント](#プロポーザルドキュメント)
+    - [関連PR](#関連pr)
 
 ## 概要
 
@@ -221,9 +222,17 @@ struct S2: Requirements {
 
 未定。migratorで自動で変換されるという記載はある、
 
+段階的な導入として
+
+- Swift5.6から利用可能だが、必要な箇所で`any`がなくてもワーニングは出ない
+- 1つ以上先のメジャーリリース※でワーニングを導入して新しい構文の導入を促す
+- 最終的に新しいメジャーな言語バージョン(Swift6を想定)では、古い構文(`any`なしの存在型)はエラーになる
+
+※ 5.6や5.7などをメジャーリリースと呼ぶ(5.5.1などをポイントリリースと呼ぶ)
+
 ### Swift5から導入する理由
 
-https://github.com/apple/swift-evolution/blob/main/proposals/0309-unlock-existential-types-for-all-protocols.mdによってExistentialをより多くのコードで使えるようになった。そのためSwift6で不正になるコードを減らすためにもSwift5から導入するのが良いと判断。
+[Unlock existentials for all protocols](https://github.com/apple/swift-evolution/blob/main/proposals/0309-unlock-existential-types-for-all-protocols.md) によってExistentialをより多くのコードで使えるようになった。そのためSwift6で不正になるコードを減らすためにもSwift5から導入するのが良いと判断。
 
 ### 将来的な話
 
@@ -278,3 +287,8 @@ extension Array {
 
 - [Introduce existential any](https://github.com/apple/swift-evolution/blob/main/proposals/0335-existential-any.md)
 - [Unlock existential for all protocols](https://github.com/apple/swift-evolution/blob/main/proposals/0309-unlock-existential-types-for-all-protocols.md)
+
+### 関連PR
+
+- [[SE-0335] Enable explicit existential types.](https://github.com/apple/swift/pull/40666)
+- [[5.6][SE-0335] Enable explicit existential types.](https://github.com/apple/swift/pull/40804)
