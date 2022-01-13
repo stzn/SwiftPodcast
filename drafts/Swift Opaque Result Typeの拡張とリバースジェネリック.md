@@ -1,6 +1,6 @@
-# Swift5.6 Opaque Result Typeの拡張とリバースジェネリック
+# Swift Opaque Result Typeの拡張とリバースジェネリック
 
-- [Swift5.6 Opaque Result Typeの拡張とリバースジェネリック](#swift56-opaque-result-typeの拡張とリバースジェネリック)
+- [Swift Opaque Result Typeの拡張とリバースジェネリック](#swift-opaque-result-typeの拡張とリバースジェネリック)
   - [概要](#概要)
   - [内容](#内容)
     - [Opaque Result Typeとは？](#opaque-result-typeとは)
