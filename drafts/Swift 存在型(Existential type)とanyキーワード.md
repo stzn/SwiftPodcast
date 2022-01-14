@@ -51,7 +51,7 @@ var dog: Animal = Dog()
 dog = Cat() // ok
 ```
 
-https://docs.swift.org/swift-book/LanguageGuide/Protocols.html#ID275
+関連ドキュメント: https://docs.swift.org/swift-book/LanguageGuide/Protocols.html#ID275
 
 ### 存在型の問題点
 
@@ -78,11 +78,29 @@ func caller() {
 ```
 
 - associatedtypeを持つプロトコルはプロトコル自身に準拠できず、マニュアルで型消去などの実装が必要になる(※できるようになる予定)
-https://github.com/apple/swift-evolution/blob/main/proposals/0309-unlock-existential-types-for-all-protocols.md
+
+関連ドキュメント: https://github.com/apple/swift-evolution/blob/main/proposals/0309-unlock-existential-types-for-all-protocols.md
 
 #### パフォーマンス面の問題
 
-- プロトコルは具体的な型を動的に保持するため、動的なメモリが必要になる。たとえ3単語バッファのようなスタックに収まる小さいものでも、ヒープ領域と参照カウンタを使う。
+- プロトコルは具体的な型を動的に保持するため、動的なメモリが必要になる。たとえ3単語バッファのようなスタックに収まる小さいものでもヒープ領域と参照カウンタを使う。
+
+下記を見てみると、プロトコルは動的な型の情報を保持するためにあらかじめメモリを確保しておく必要がある。(`class`は実際のオブジェクトのメモリアドレスを保持するために必要なメモリが確保される)
+
+```swift
+protocol Animal {}
+struct Dog: Animal {}
+class Cat: Animal {}
+
+let animal: Animal = Dog()
+let dog = Dog()
+let cat = Cat()
+
+MemoryLayout.size(ofValue: animal) // 40
+MemoryLayout.size(ofValue: dog) // 0
+MemoryLayout.size(ofValue: cat) // 8
+```
+
 - メソッドのダイナミックディスパッチやポインタの間接参照があるため、コンパイラによる最適化もできない。
 
 #### ジェネリックの制約としてのプロトコルと存在型としてのプロトコル
@@ -232,7 +250,7 @@ struct S2: Requirements {
 
 ### Swift5から導入する理由
 
-[Unlock existentials for all protocols](https://github.com/apple/swift-evolution/blob/main/proposals/0309-unlock-existential-types-for-all-protocols.md) によってExistentialをより多くのコードで使えるようになった。そのためSwift6で不正になるコードを減らすためにもSwift5から導入するのが良いと判断。
+[Unlock existential for all protocols](https://github.com/apple/swift-evolution/blob/main/proposals/0309-unlock-existential-types-for-all-protocols.md) によってExistentialをより多くのコードで使えるようになった。そのためSwift6で不正になるコードを減らすためにもSwift5から導入するのが良いと判断。
 
 ### 将来的な話
 
