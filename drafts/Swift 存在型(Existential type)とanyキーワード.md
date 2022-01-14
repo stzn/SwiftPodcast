@@ -101,7 +101,29 @@ MemoryLayout.size(ofValue: dog) // 0
 MemoryLayout.size(ofValue: cat) // 8
 ```
 
-- メソッドのダイナミックディスパッチやポインタの間接参照があるため、コンパイラによる最適化もできない。
+- メソッドのダイナミックディスパッチやポインタの間接参照があるため、コンパイラによる最適化ができない。
+
+下記の例で見てみると、変数`animal`の値は実行時までわからないため、コンパイル時に型を決められない。
+
+```swift
+
+protocol Animal {
+    func bark()
+}
+struct Dog: Animal {
+    func bark() { print("bowwow") }
+}
+
+class Cat: Animal {
+    func bark() { print("meow") }
+}
+
+var animal: Animal = Dog()
+animal.bark() // bowwow
+
+animal = Cat()
+animal.bark() // meow
+```
 
 #### ジェネリックの制約としてのプロトコルと存在型としてのプロトコル
 
