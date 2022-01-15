@@ -5,15 +5,15 @@
   - [内容](#内容)
     - [問題点](#問題点)
     - [解決策](#解決策)
+    - [なぜ今出てきたの？](#なぜ今出てきたの)
     - [文法](#文法)
     - [型推論の流れ](#型推論の流れ)
-    - [使い方](#使い方)
-      - [ジェネリック制約](#ジェネリック制約)
-      - [ジェネリックパラメータの推論](#ジェネリックパラメータの推論)
-      - [関数シグネチャ(入力と出力)](#関数シグネチャ入力と出力)
-      - [ダイナミックキャスト(ランタイム時のキャスト)](#ダイナミックキャストランタイム時のキャスト)
+    - [ジェネリック制約](#ジェネリック制約)
+    - [ジェネリックパラメータの推論](#ジェネリックパラメータの推論)
+    - [関数シグネチャ(入力と出力)には使えない](#関数シグネチャ入力と出力には使えない)
+    - [ダイナミックキャスト(ランタイム時のキャスト)は使えるけど](#ダイナミックキャストランタイム時のキャストは使えるけど)
     - [将来的な検討事項](#将来的な検討事項)
-      - [ジェネリックの基の型やネストした型でも使えるようにする](#ジェネリックの基の型やネストした型でも使えるようにする)
+      - [ジェネリックの基の型やネストした型でも使えるようにするかの検討](#ジェネリックの基の型やネストした型でも使えるようにするかの検討)
         - [ジェネリックの基の型](#ジェネリックの基の型)
         - [ネストした型](#ネストした型)
       - [属性のタイププレースホルダ](#属性のタイププレースホルダ)
@@ -21,10 +21,11 @@
   - [参考リンク](#参考リンク)
     - [Forums](#forums)
     - [プロポーザルドキュメント](#プロポーザルドキュメント)
+    - [その他](#その他)
 
 ## 概要
 
-Swiftの型推論は特定の場合にうまく機能しないことがある。そういった場合、開発者側で、全部が必要ではない場合でも明示的に全ての型を指定しなければならない。そこで、Swift5.6よりタイププレースホルダという機能を追加してこの負担を軽減する。
+Swiftの型推論は特定のケースでうまく機能しないことがある。そういった場合、開発者側で必要ではない型も明示しなければならない。そこで、Swift5.6よりタイププレースホルダという機能を追加してこの負担を軽減する。
 
 ```swift
 let losslessStringConverter = Double.init as (String) -> Double?
@@ -84,7 +85,7 @@ func makePublisher() -> Some<Complex<Nested<Publisher<Chain<Int>>>>> { ... }
 `makePublisher`から`Either`を初期化するのは難しい。
 
 ```swift
-let publisherOrValue = Either(left: makePublisher()) // Error: generic parameter 'Right' could not be inferred
+let publisherOrValue = Either(left: makePublisher()) // ❌ Error: generic parameter 'Right' could not be inferred
 ```
 
 こうする必要がある。
@@ -105,11 +106,17 @@ let publisherOrValue = Either<_, Int>(left: makePublisher())
 
 `makePublisher`の型は戻り値からわかるので推論できる。
 
+### なぜ今出てきたの？
+
+型推論システムの改善によって、こういった推論ができるようになった。  
+
+関連ドキュメント: https://github.com/apple/swift/blob/main/docs/TypeChecker.md
+
 ### 文法
 
-Swiftで型を指定できるところではどこでも使える(変数の型を指定、`as`を使ったキャスト、型引数を明示的に渡す、ジェネリック制約など)
+Swiftで型を指定できるところではどこでも使える。
 
-下記のようなところで使える。
+タイププレースホルダを含んだ型の例:
 
 ```swift
 Array<_>
@@ -117,6 +124,31 @@ Array<_>
 (_) -> Int
 (_, Double)
 _?
+```
+
+ただし、トップレベルの型には使用できない(詳しくは[トップレベルのタイププレースホルダ](#トップレベルのタイププレースホルダ)を参照)。
+
+```swift
+let percent: _ = 100.0 // ❌ placeholders are not allowed as top-level types
+```
+
+ネストした型にも使用できない(詳しくは[ネストした型](#ネストした型)を参照)。
+
+```swift
+struct Outer {
+    struct Inner {}
+    func inner() -> Inner { Inner() }
+}
+
+func test(outer: Outer) {
+    let result: Outer._ = outer.inner() // ❌
+}
+```
+
+ジェネリックの基の型にも使用できない(詳しくは[ジェネリックの基の型](#ジェネリックの基の型)を参照)。
+
+```swift
+let publisher: _<Int, Error> = Just(0).setFailureType(to: Error.self).eraseToAnyPublisher() // ❌
 ```
 
 ### 型推論の流れ
@@ -150,19 +182,21 @@ let publisher: AnyPublisher<Int, Error> = Just(makeValue()).setFailureType(to: E
 let publisher: AnyPublisher<Int, _> = Just(makeValue()).setFailureType(to: Error.self).eraseToAnyPublisher()
 ```
 
-### 使い方
+### ジェネリック制約
 
-#### ジェネリック制約
-
-特定のプロトコルに準拠していることが期待される箇所にも利用できる場合がある
+特定のプロトコルに準拠していることが期待される箇所にも利用できる。
 
 ```swift
 let dict: [_: String] = [0: "zero", 1: "one", 2: "two"]
 ```
 
-`Key`のタイププレースホルダは`Hashable`であると期待され、必要なすべての制約を満たすと想定され、イニシャライザがチェックされるまでこれらの制約の検証を延期する。
+`Key`のタイププレースホルダは`Hashable`に準拠した型が期待される。現在のタイププレースホルダは、全て具体的な型の推論として利用されるため、`Key`は全て同じ型である必要がある。
 
-#### ジェネリックパラメータの推論
+```swift
+let dict: [_: String] = ["0": "zero", 1: "one", 2: "two"] // ❌　Cannot convert value of type 'String' to expected dictionary key type 'Int'
+```
+
+### ジェネリックパラメータの推論
 
 既存のジェネリックパラメータの推論で既に一部は実現できている。例えば、
 
@@ -176,9 +210,9 @@ let publisher = Just(0) // Just<Int>と推論される
 let publisher = Just<_>(0)
 ```
 
-#### 関数シグネチャ(入力と出力)
+### 関数シグネチャ(入力と出力)には使えない
 
-既存の通り、引数の戻り値の型を完全に指定する必要がある。たとえ、プロトコル要件やデフォルト引数などで型が明らかにわかっている場合などでも。
+現在の実装ルールに合わせて引数の戻り値の型を完全に指定する必要がある。たとえプロトコル要件やデフォルト引数などで型が明らかにわかっている場合などでも。
 
 下記はエラー。
 
@@ -222,7 +256,7 @@ extension Bar {
 }
 ```
 
-#### ダイナミックキャスト(ランタイム時のキャスト)
+### ダイナミックキャスト(ランタイム時のキャスト)は使えるけど
 
 ダイナミックキャストは、`as`とは異なり、`0 as? String`や`[""] is Double`と書くことができるように、キャスト式とキャストタイプの間に固有の関係はない。
 
@@ -230,13 +264,13 @@ extension Bar {
 
 ### 将来的な検討事項
 
-#### ジェネリックの基の型やネストした型でも使えるようにする
+#### ジェネリックの基の型やネストした型でも使えるようにするかの検討
 
-いくつかの例では、まだ技術的にコンパイラが必要な情報以上に型情報を提供する必要がある。
+いくつかの例では、まだ技術的にコンパイラが必要な情報以上に型情報を提供する必要がある。たとえば、ジェネリックの基の型や型の中のネストした型も推論させることは可能。しかし、これらがコードをより明確にするかどうかは懐疑的なため、有用性やトレードオフなどを将来的に検討して導入の可否を決める。
 
 ##### ジェネリックの基の型
 
-例えば、上記の`Just`の例では、
+例えば、
 
 ```swift
 let publisher: _<Int, _> = Just(makeValue())
@@ -244,11 +278,11 @@ let publisher: _<Int, _> = Just(makeValue())
     .eraseToAnyPublisher() // ❌
 ```
 
-`eraseToAnyPublisher()`から基の型は`AnyPublisher`であることは明白なので、利用できる可能性がある。
+これは、`eraseToAnyPublisher()`から基の型は`AnyPublisher`であることは明白なので、利用できる可能性がある。
 
 ##### ネストした型
 
-同様に、型の内部のメンバでも利用できる可能性がある。
+同様に、型の内部のメンバでも利用できる可能性がある。下記の例では、変数の型の親(`S`)から推論できる。
 
 ```swift
 struct S {
@@ -262,8 +296,6 @@ func test(val: S) {
   let result: S._ = val.overloaded() // 'func overloaded() -> Inner'を読んでいる
 }
 ```
-
-これはどっちの`overloaded()`が使われているかがコードから明確かが懐疑的なため、さらにトレードオフなどを議論する必要がある。
 
 #### 属性のタイププレースホルダ
 
@@ -316,3 +348,7 @@ self.someProp = try container.decode(_.self, forKey: .someProp)
 ### プロポーザルドキュメント
 
 - [Type placeholders](https://github.com/apple/swift-evolution/blob/main/proposals/0315-placeholder-types.md)
+
+### その他
+
+- [Type Checker Design and Implementation](https://github.com/apple/swift/blob/main/docs/TypeChecker.md)
