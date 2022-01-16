@@ -96,7 +96,7 @@ Task.detached { print(counter.increment()) } // データ競合しない
 
 ### actorのイニシャライザの前提知識
 
-actorのイニシャライザはactorに分離されていない。これは、`self`が初期化するまで他からアクセスできないので格納プロパティへアクセスは安全に行うことができる。そのため、`non-async`なイニシャライザは、`await`なしで呼び出せる。
+actorのイニシャライザはactorに分離されていない。これは、`self`が初期化するまで同期が必要なインスタンスが存在しないため。また`nonsiolated self`のイニシャライザは安全な場合、格納プロパティへアクセスできる。そのため、`non-async`なイニシャライザは、`await`なしで呼び出せる。
 
 ### 現在の問題点
 
@@ -276,14 +276,15 @@ Swift5.5では、「escapingでの使用制限」(escaping-use restriction)が�
 
 があり、こういった使用は禁止されていた。この制限は過剰で、このescaping使用制限を削除する。代わりに、よりシンプルなルールを提案。
 
-まずイニシャライザをisolationの度合いに応じて二つに分類する。
+まずイニシャライザを分離のされ方に応じて二つに分類する。
 
-1. `nonisolated self`
-   - `non-async`
-   - global-actor isolated
-   - `nonisolated`
+1. `nonisolated self`参照を保持するイニシャライザ
+   - `non-async`イニシャライザ
+   - global-actor分離されたイニシャライザ
+   - `nonisolated`イニシャライザ
 
-2. `async`イニシャライザ(`isolated self`参照を保持している)
+2. `isolated self`参照を保持するイニシャライザ
+   - `async`イニシャライザ
 
 ###### `isolated self`のイニシャライザ
 
@@ -342,7 +343,7 @@ actor上でsuspensionが発生した際に、他のactorのタスクをexecutor�
 
 関連ドキュメント: https://github.com/apple/swift-evolution/blob/main/proposals/0306-actors.md#actor-reentrancy
 
-これらの暗黙のhopの効果は、プログラマから見ると、`async`イニシャライザにルールが追加されていないように見えること。他の`async`メソッドと同じように、イニシャライザは全体でactorに分離された状態になっているように見なせる。ほとんどのケースでイニシャライザにhopが挿入されるflow-sensitiveなポイントは実装詳細として無視することができる。ただし例外としては下記のようなものもある。
+これらの暗黙のhopの効果は、プログラマから見ると、`async`イニシャライザにルールが追加されていないように見えること。他の`async`メソッドと同じように、イニシャライザは全体でactorに分離された状態になっているように見なせる。ほとんどのケースでイニシャライザにhopが挿入されるFlow-sensitiveなポイントは実装詳細として無視することができる。ただし例外としては下記のようなものもある。
 
 ```swift
 actor OddActor {
@@ -359,11 +360,9 @@ actor OddActor {
 
 ###### nonisolated selfのイニシャライザ
 
-このカテゴリには`non-async`、または`self`とは異なったコンテキストで分離して実行されるイニシャライザを含んでいる。メソッドと異なり、同期する必要のあるactorインスタンスは存在しないため、actorの`non-async`イニシャライザに`await`は必要ない。また、このカテゴリのイニシャライザは同期なしで格納プロパティでアクセスすることができる。
+このカテゴリには`non-async`、または`self`とは異なったコンテキストで分離して実行されるイニシャライザを含んでいる。メソッドと異なり、同期する必要のあるactorインスタンスは存在しないため、actorの`non-async`イニシャライザに`await`は必要ない。また、`nonisolated self`のイニシャライザは安全ならば同期なしで格納プロパティにアクセスすることができる。
 
-格納プロパティにアクセスするにはactorのインスタンスを立ち上げる必要がある。これは`self`の参照アクセスが排他的であるという弱い分離の形式が想定されている。`self`がイニシャライザをescapeする場合に、このユニークさは時間のかかる分析なしでは保証できない。
-
-そこで、Flow-Sensitive actor分離(※)を利用する。この`self`の分離は、直接格納プロパティへアクセスする以外の`self`の使用は、全て`nonisolated`へ衰退する。これは特定の制御フローで一度起きたらイニシャライザの最後まで保たれる。
+格納プロパティにアクセスするにはactorのインスタンスを立ち上げる必要がある。これは`self`の参照アクセスが排他的であるということに依存した弱い分離の形式が想定されている。この場合`self`がイニシャライザをescapeする場合、このユニークさは時間のかかる分析なしでは保証できない。そこで、直接格納プロパティへアクセスする以外に`self`を使用している間は`nonisolated`へ衰退する。(Flow-Sensitive actor分離(※))。これは特定の制御フローで一度起きたらイニシャライザの最後まで保たれる。
 
 ※ データフロー解析を使って制御フローの位置に応じてactorの分離状態を変えること。
 https://ja.wikipedia.org/wiki/データフロー解析
@@ -399,27 +398,27 @@ actor Charlie {
         self.fixedSendable = NotSendableString("123 Main St.")
 
         if score > 50 {
-            nonisolatedMethod() // ✅ nonisolated selfの使用
-            greetCharlie(self)  // ✅ nonisolated selfの使用
-            self.me = self      // ✅ nonisolated selfの使用
+            nonisolatedMethod() // ✅ selfのnonisolatedな使用
+            greetCharlie(self)  // ✅ selfのnonisolatedな使用
+            self.me = self      // ✅ selfのnonisolatedな使用
         } else if score < 50 {
             score = 50
         }
 
-        assert(score >= 50) // ❌ nonisolated selfの使用後に、可変な分離された格納プロパティへアクセスできない
+        assert(score >= 50) // ❌ selfのnonisolatedな使用後に、可変な分離された格納プロパティへアクセスできない
 
-        _ = self.fixedNonSendable // ❌ nonisolated selfの使用後に、non-Sendableなプロパティへアクセスできない
+        _ = self.fixedNonSendable // ❌ selfのnonisolatedな使用後に、non-Sendableなプロパティへアクセスできない
         _ = self.fixedSendable
 
-        Task { await self.incrementScore() } // ✅ nonisolated selfの使用
+        Task { await self.incrementScore() } // ✅ selfのnonisolatedな使用
     }
 }
 ```
 
 この例のポイントは、`if else`で複数の制御フローがイニシャライザに導入されていること。
-最初の条件分岐の中で複数回`self`の`nonisolated`な使用をしている。一方の分岐(`else if`)ではまだ`score`への読み書きはできる。一方で`if else`の後の`assert`の時点では、この地点に到達できるブロックの一つで、`self`の`nonisolated`な使用が行われているため、`self`は`nonisolated`とみなされる。
+最初の条件分岐の中で複数回`self`の`nonisolated`な使用をしている。一方の分岐(`else if`)ではまだ`score`への読み書きはできる。一方で`if else`の後の`assert`の時点では、ここに到達できるブロックの一つで、`self`が非分離に使用されているため、`self`は`nonisolated`とみなされる。
 
-結論として、`self`が`nonisolated self`になった後は、アクセス可能な唯一の格納プロパティは`let`で宣言された`Sendable`なもののみとなる。それ以外の格納プロパティへ不正にした場合は、分離の変化が発生した不正アクセスよりも前に`self`を使用した場所の一つを指摘する。この早期というのは制御フローの観点で、プログラム上のどこに現れるかではない(不正アクセスより下に記述されていたとしても実行順序が先の場合はそこのポイントが指摘される)。
+結果的に、`self`が`nonisolated self`になった後は、アクセス可能な唯一の格納プロパティは`let`で宣言された`Sendable`なもののみとなる。それ以外の格納プロパティへ不正にアクセスした場合は、分離の衰退が発生した不正アクセスよりも前に`self`を使用した場所の一つを指摘する。これは制御フローの観点で、プログラム上のどこに現れるかではない(不正アクセスより下に記述されていたとしても実行順序が先の場合はそこのポイントが指摘される)。
 
 例えば、`defer`を使った`Charlie.init`の別の例を見て考えてみる。
 
@@ -427,9 +426,9 @@ actor Charlie {
 init(hasADefer: Void) {
     self.score = 0
     defer {
-        print(self.score) // ❌ nonisolated selfの使用後に、分離された可変の格納プロパティへアクセスできない
+        print(self.score) // ❌ selfのnonisolatedな使用後に、分離された可変の格納プロパティへアクセスできない
     }
-    Task { await self.incrementScore() } // note: nonisolated selfの使用
+    Task { await self.incrementScore() } // note: selfのnonisolatedな使用
 }
 ```
 
@@ -441,8 +440,8 @@ init(hasADefer: Void) {
 init(hasALoop: Void) {
     self.score = 0
     for i in 0..<10 {
-        self.score += i     // ❌ nonisolated selfの使用後に、分離された可変の格納プロパティへアクセスできない
-        greetCharlie(self)  // note: nonisolated selfの使用
+        self.score += i     // ❌ selfのnonisolatedな使用後に、分離された可変の格納プロパティへアクセスできない
+        greetCharlie(self)  // note: selfのnonisolatedな使用
     }
 }
 ```
@@ -451,7 +450,7 @@ init(hasALoop: Void) {
 
 **他の例**
 
-`non-async`イニシャライザ以外にも、global-actor isolatedや`nonisolated`なイニシャライザも`nonisolated self`になる可能性がある。
+`non-async`イニシャライザ以外にも、global-actorに分離されていたり、`nonisolated`の付いたイニシャライザも`nonisolated self`を持つ可能性がある。
 
 下記の例を考えてみる。
 
@@ -475,10 +474,10 @@ actor Status {
     @MainActor init(_ val: Bool) async {
         self.valid = val
 
-        let old = await self.exchange(with: false) // note: nonisolated selfの使用
+        let old = await self.exchange(with: false) // note: selfのnonisolatedな使用
         assert(old == val)
 
-        _ = self.valid //❌ nonisolated selfの使用後に、可変なisolatedの格納プロパティへアクセスできない
+        _ = self.valid //❌ selfのnonisolatedな使用後に、可変なisolatedの格納プロパティへアクセスできない
 
         let isValid = await self.isValid() // ✅ OK
 
@@ -487,7 +486,7 @@ actor Status {
 }
 ```
 
-`await`できる場合、`nonisolated self`なイニシャライザから分離されたメソッドの呼び出しが許可されていることに注目。この呼び出しはnonisolated selfの使用とみなされる。これが格納プロパティへのアクセス以外で最初の`self`へのアクセスになる。その後は、`non-async`イニシャライザと同じように`init`内での格納プロパティへのアクセスはできなくなる。このイニシャライザは`async`なので技術的には`Sendable`な`self.valid`の値を`await`できるが、この状況でのアクセスを禁止することを選んだ。(詳細は[nonisolated selfのイニシャライザ内のプロパティへのアクセスにawaitをつける](#nonisolated-selfのイニシャライザ内のプロパティへのアクセスにawaitをつける)を参照)
+`await`できる場合、`nonisolated self`を持つイニシャライザから`self`に分離されたメソッドの呼び出しが許可されていることに注目。この呼び出しは、`nonisolated self`の使用とみなされ、格納プロパティへのアクセス以外で最初の`self`へのアクセスになる。その後は、`non-async`イニシャライザと同じように`init`内での格納プロパティへのアクセスはできなくなる。このイニシャライザは`async`なので技術的には`Sendable`な`self.valid`の値を`await`できるが、この状況でのアクセスを禁止することを選んだ。(詳細は[nonisolated selfのイニシャライザ内のプロパティへのアクセスにawaitをつける](#nonisolated-selfのイニシャライザ内のプロパティへのアクセスにawaitをつける)を参照)
 
 ##### GAITs(global-actorに分離された型)
 
@@ -510,9 +509,9 @@ where T: Sendable, T: Equatable {
 }
 ```
 
-これを防ぐためにGAITの`nonisolated`イニシャライザにもflow-sensitive actor分離を適用する。
+これを防ぐためにGAITの`nonisolated`イニシャライザにもFlow-sensitive actor分離を適用する。
 
-isolatedなイニシャライザの場合、GAITはイニシャライザの呼び出し前にactorに分離できる。なぜなら、executorはstaticインスタンスなので、GAITインタンスの未初期化のメモリを割り当てるより前に存在しているから。そのため、GAITのisolatedなイニシャライザは、初期化開始前に正しいexecutorで実行されるためにも`await`が必要になる。そしてこのexecutorはイニシャライザがリターンするまで確保されているため、GAITのisolatedなイニシャライザではisolatedな格納プロパティ間でのデータ競合の危険がない。
+分離されたイニシャライザの場合、GAITはイニシャライザの呼び出し前に既にactorに分離できている。なぜなら、executorはstaticインスタンスなので、GAITインスタンスの未初期化のメモリを割り当てるより前に存在しているから。そのため、GAITのisolatedなイニシャライザは、初期化開始前に正しいexecutorで実行されるためにも`await`が必要になる。そしてこのexecutorはイニシャライザがリターンするまで確保されているため、GAITの分離されたイニシャライザでは分離された格納プロパティ間でのデータ競合の危険がない。
 
 ```swift
 @MainActor
@@ -546,13 +545,13 @@ actorは継承がないため、`class`の複雑さを減らすことができ�
 
 ##### Isolation
 
-非委譲イニシャライザと多くが同じで、actorの委譲イニシャライザも`isolated self`または`nonisolated self`の場合がある(non-asyncイニシャライザは`nonisolated self`)。しかし、格納プロパティを初期化する必要がないため、委譲イニシャライザは本文中に存在するものに関するよりシンプルなルールを持つ。つまり、flow-sensitive actor分離ではなく、通常の関数と同様に`self`の分離状態はイニシャライザ内で一貫している(isolationの衰退が起きない)。
+非委譲イニシャライザと多くが同じで、actorの委譲イニシャライザも`isolated self`または`nonisolated self`の場合がある(non-asyncイニシャライザは`nonisolated self`)。しかし、格納プロパティを初期化する必要がないため、委譲イニシャライザは本文中に存在するものに関するよりシンプルなルールを持つ。つまり、Flow-sensitive actor分離ではなく、通常の関数と同様に`self`の分離状態はイニシャライザ内で一貫している(分離の衰退が起きない)。
 
 #### Sendability
 
 actorの委譲イニシャライザとGAITの全てのイニシャライザは、他の関数と同じSendable引数に関するルールに従う。つまり、関数が分離された状態の場合、actorをまたがった呼び出しの場合、引数は`Sendable`プロトコルへの準拠が必須になる。
 
-actorの非委譲イニシャライザでは、`self`にflow-sensitive分離が適用されているかどうかに関わらず、`Sendable`という観点では分離された状態だとみなされる。なぜならこれらのイニシャライザがインスタンス立ち上げの際にactorの格納プロパティにアクセスできるからである。
+actorの非委譲イニシャライザでは、`self`にFlow-sensitive分離が適用されているかどうかに関わらず、`Sendable`という観点では分離された状態だとみなされる。なぜならこれらのイニシャライザがインスタンス立ち上げの際にactorの格納プロパティにアクセスできるからである。
 
 この二つのルールによって、プログラマは新しいactorインスタンスを生成する際に、安全に`Sendable`の値を扱うことができる。基本的に、プログラマはactorのnon-Sendableな格納プロパティを初期化する場合は二つの選択肢しかない。
 
@@ -620,9 +619,9 @@ func someFunc(ns: NonSendableType) async {
 
 Swift5.5では、actorとGAITは`deinit`の中で二つの異なる種類のデータ競合を起こす可能性がある。一つは他のタスクと`self`の参照を共有していることに関してで、もう一つはexecutorを共有していることに関連している。
 
-最初の問題の解決法は、`nonisolated self`に対するflow-sensitive分離を`deinit`にも適用する。`deinit`は、事実上立ち上げの代わりに片付けや衰退をする目的の`non-async`で非委譲イニシャライザであるため、`nonisolated self`になる。特に`deinit`は`self`へのユニークな参照から始まるため、`nonisolated self`へ衰退するルールに完全に適している。これはactorとGAITの両方に適用される。
+最初の問題の解決法は、`nonisolated self`に対するFlow-sensitive分離を`deinit`にも適用する。`deinit`は、インスタンスの立ち上げの代わりに片付けや破壊をする目的の`non-async`非委譲イニシャライザと事実上同じでであるため、`nonisolated self`を持つ。特に`deinit`は`self`へのユニークな参照から始まるため、`nonisolated self`へ衰退するルールに完全に適している。これはactorとGAITの両方に適用される。
 
-二つ目の問題の解決方法は、`deinit`は`Sendable`な`self`の格納プロパティにしかアクセスできないようにする。より具体的には、`self`がユニークな参照で`nonisolated self`に変わっていない場合、actorやGAITの`Sendable`な格納プロパティにしかアクセスできなくする。イニシャライザは呼び出し側で分離状態かどうかと`Sendable`引数のチェックをしていることがわかっているので、この制限は`init`には不要。`deinit`はいつどこから呼ばれるかがわからないため、この余分な負担が必要になってくる。事実上、non-Sendableなactorに分離された状態は、内部でactorからその状態の`deinit`を呼び出すことでしかデイニシャライズできない。
+二つ目の問題の解決方法は、`deinit`は`Sendable`な`self`の格納プロパティにしかアクセスできないようにする。より具体的には、`self`への参照がユニークで`nonisolated self`に衰退していない場合でも、actorやGAITの`Sendable`な格納プロパティにしかアクセスできなくする。イニシャライザは呼び出し側で分離状態かどうかと`Sendable`引数のチェックをしていることがわかっているので、この制限は`init`には不要。`deinit`はいつどこから呼ばれるかがわからないため、この余分な負担が必要になってくる。事実上、non-Sendableなactorに分離された状態は、内部でactorからその状態の`deinit`を呼び出すことでしか非初期化できない。
 
 下記のこの新しいルールをコードで示す。
 
@@ -663,9 +662,9 @@ actor A {
 
 #### global-actor分離とactorインスタンスメンバ
 
-格納プロパティの型がglobal-actorに分離されている場合の主な問題は、そのデフォルト値もそのglobal-actorに分離されているという点。プロパティは個々にglobal-actorに分離されているため、型として一つのactorに分離できないという不可能なactor分離の要件が生まれてしまう。非委譲の`non-async`イニシャライザに必要な分離状態は、デフォルト値を持つ格納プロパティに適用されるすべての分離状態と融合しなければならなくなる。なぜならば`non-async`イニシャライザはhopできず、関数を二つのglobal actorに分離させることができない。Swift5.5では、この不可能な要件が受け入れられている。
+格納プロパティの型がglobal-actorに分離されている場合の主な問題は、そのデフォルト値もそのglobal-actorに分離されているという点。プロパティは個々にglobal-actorに分離されているため、型として一つのactorに分離できないという不可能なactor分離の要件が生まれてしまう。`non-async`非委譲イニシャライザに必要な分離状態は、デフォルト値を持つ格納プロパティに適用されるすべての分離状態と融合しなければならなくなる。なぜならば`non-async`イニシャライザはhopできず、関数は二つのglobal actorに分離させることができない。Swift5.5では、この不可能な要件が受け入れられている。
 
-これを解決するために、nominal型の格納プロパティのデフォルト値に適用された分離コンテキストを削除する。その代わりにそれらは型システムから`nonisolated`とみなされる。それらのプロパティを初期化するために分離コンテキストが必要な場合は、常に`init`を定義し、適切な分離コンテキストを提供することができる。
+これを解決するために、nominal型メンバの格納プロパティのデフォルト値に適用されたいかなる分離状態を削除する。その代わりにそれらは型システムから`nonisolated`な状態とみなされる。それらのプロパティを初期化するために分離が必要な場合は、常に`init`を定義し、適切な分離状態を提供することができる。
 
 グローバルやstaticの格納プロパティは、デフォルト値の分離コンテキストはそのプロパティの分離コンテキストが引き続き適用される。このルールは下記のような例で必要になる。
 
@@ -699,7 +698,7 @@ https://en.wikipedia.org/wiki/False_sharing
 source breakが起きる点
 
 - actorやGAITの`deinit`で使える機能が制限される
-- GAITの`nonisolated self`な`init`では、データ競合を防ぐために使用できる機能が制限される
+- GAITの`nonisolated self`を持つ`init`では、データ競合を防ぐために使用できる機能が制限される
 - actorのglobal-actorの格納プロパティは禁止される
 - actorに分離可能な格納プロパティのメンバのデフォルト値は`nonisolated`とみなされる
 
@@ -744,13 +743,13 @@ actor CounterExampleActor {
 
 Swiftでは`self`が完全に初期化された後はすぐに自由に利用できる。そのため、`nonisolation`を`self`のそれぞれの使用に紐づけると、データ競合(`f`はactorを変更するタスクの中で`self`をescapeすることができ、イニシャライザは格納プロパティが同期されていない状態でアクセスする`f`から戻ってきた後も継続する)を許しても、上記の二つのイニシャライザは受け入れるべきである。
 
-今回のプロポーザルのflow-sensitive分離では、上記の二つの例はエラーになる。`nonisolation`になる起源は`f()`の呼び出しで明確になっているため、プログラマはコードを修正できる。
+今回のプロポーザルのFlow-sensitive分離では、上記の二つの例はエラーになる。`nonisolation`になる起源は`f()`の呼び出しで明確になっているため、プログラマはコードを修正できる。
 
 ここで`f()`の呼び出しを削除した場合はどうなるだろうか？プロポーザルの分離ルールだと、安全なので受け入れられる。`nonisolation`になる要素がない。もし`self`が完全に初期化された後、すぐに`nonisolation`になってそれがイニシャライザの終わりまで継続される場合、`f`が呼ばれなくても、上記のイニシャライザは不必要に拒否されるだろう。
 
 ##### nonisolated selfのイニシャライザ内のプロパティへのアクセスにawaitをつける
 
-`nonisolated self`のイニシャライザでは、nonisolated selfの使用後、格納プロパティへのアクセスは禁止される。`non-async`イニシャライザでは、適切なactorのコンテキストへhopすることができないため、これを回避する方法はない。しかし、`nonisolated self`の`async`イニシャライザの場合は、hopすることができる。
+`nonisolated self`を持つイニシャライザでは、selfのnonisolatedな使用後、格納プロパティへのアクセスは禁止される。`non-async`イニシャライザでは、適切なactorのコンテキストへhopすることができないため、これを回避する方法はない。しかし、`nonisolated self`を持つ`async`イニシャライザの場合はhopすることができる。
 
 ```swift
 actor AwkwardActor {
@@ -769,9 +768,9 @@ actor AwkwardActor {
 
 これは実現可能であるものの、このプロポーザルではこれに反対している。
 
-このようなflow-sensitive分離をサポートすることによるメリットよりも、新しい混乱を生み出す可能性の方が高い。詳細を知らないプログラマがこのコードを読んだ際、`await`は不要に見え、関数全体がisolatedされているかどうかがわからなくなる可能性がある。しかし、この特定の種類の`nonisolated self`かつ`async`イニシャライザが、読み手のプログラマへ、関数の途中で分離が衰退することを示す唯一のポイントになる。
+Flow-sensitive分離での`async`なプロパティへのアクセスをサポートすることによるメリットよりも、新しい混乱を生み出す可能性の方が高い。詳細を知らないプログラマがこのコードを読んだ際、`await`は不要に見え、全ての関数に適用されている分離のルールへの理解を困難にするかもしれない。しかし、この特定の種類の`nonisolated self`を持つ`async`イニシャライザが、読み手のプログラマへ、関数の途中で分離が衰退することを示す唯一のポイントでもある。
 
-有効なSwiftコードで、この関数の途中で分離が衰退することが見えるという点が上記のコードを拒否する理由。今回のプロポーザルでは、`nonisolated self`かつ`non-async`なイニシャライザの場合、分離衰退後の格納プロパティへのアクセスは禁止されている。これらのイニシャライザの正しいルールは、分離の衰退を見えなくすることで、カジュアルな読み手は何も異常に気がつかない。コードを変更するときのみ、この分離の衰退の概念は適切になる。ただし、この概念も今回のプロポーザル説明するために使用される単なるツールです。 プログラマは、イニシャライザで`self`をエスケープした後は、格納プロパティへのアクセスできないことだけ覚えておけばよい。
+有効なSwiftコードで、この関数の途中で分離が衰退することが見えるという点が上記のコードを拒否する理由。今回のプロポーザルでは、`nonisolated self`を持つ`non-async`なイニシャライザの場合、分離からの衰退後の格納プロパティへのアクセスは禁止されている。これらのイニシャライザの正しい公式は、分離の衰退を見えなくすることで、読み手に何も異常に気がつかなくさせること。コードを変更するときのみ、この分離の衰退の概念は適切になる。ただし、この概念も今回のプロポーザル説明するために使用される単なるツール。プログラマは、イニシャライザで`self`をエスケープした後は、格納プロパティへのアクセスできないことだけ覚えておけばよい。
 
 ##### actorのasyncデイニシャライザ
 
@@ -793,7 +792,7 @@ actor AwkwardActor {
 
 ### 関連PR
 
-- [[SE-327] Implement flow-sensitive actor isolation for actor inits](https://github.com/apple/swift/pull/40028)
+- [[SE-327] Implement Flow-sensitive actor isolation for actor inits](https://github.com/apple/swift/pull/40028)
 - [[SE-327] Remove redundant global-actor isolation](https://github.com/apple/swift/pull/40868)
 
 ### その他
