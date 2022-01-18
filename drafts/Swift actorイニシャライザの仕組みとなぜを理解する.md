@@ -18,6 +18,7 @@
           - [`isolated self`のイニシャライザ](#isolated-selfのイニシャライザ)
           - [nonisolated selfのイニシャライザ](#nonisolated-selfのイニシャライザ)
         - [GAITs(global-actorに分離された型)](#gaitsglobal-actorに分離された型)
+        - [actorイニシャライザのルールを簡単にまとめると](#actorイニシャライザのルールを簡単にまとめると)
       - [委譲イニシャライザ](#委譲イニシャライザ)
         - [シンタックス](#シンタックス)
         - [Isolation](#isolation)
@@ -219,7 +220,7 @@ func example() async {
 
 #### 格納プロパティのactor分離
 
-現在は、`class`、`struct`、`enum`ではglobal-actorに分離されたプロパティを保持できる。プログラマがデフォルト値を指定している場合、その値はそれぞれの型の非委譲イニシャライザの中で計算される。
+現在は、`class`、``struct``、``enum``ではglobal-actorに分離されたプロパティを保持できる。プログラマがデフォルト値を指定している場合、その値はそれぞれの型の非委譲イニシャライザの中で計算される。
 
 問題なのは、それらがそれぞれのglobal-actorのエグゼキュータ上で実行されるため、不可能な制約が生成できてしまう。
 
@@ -240,10 +241,10 @@ class Process {
 
 #### イニシャライザの委譲
 
-Swiftでは全てのnominal型(`class`や`struct`などの名前のある型)はイニシャライザの委譲(他のイニシャライザに残りの初期化を任せることができる機能)をサポートしている。classは継承があるため他よりも複雑で、委譲するイニシャライザには`convenience`修飾子をつけなければならない。値型は継承がないためよりシンプル。任意の`init`で委譲可能だが、その場合は全実行パスで委譲または`self`への割り当てが必要になる。
+Swiftでは全てのnominal型(`class`や``struct``などの名前のある型)はイニシャライザの委譲(他のイニシャライザに残りの初期化を任せることができる機能)をサポートしている。classは継承があるため他よりも複雑で、委譲するイニシャライザには`convenience`修飾子をつけなければならない。値型は継承がないためよりシンプル。任意の`init`で委譲可能だが、その場合は全実行パスで委譲または`self`への割り当てが必要になる。
 
 ```swift
-struct S {
+`struct` S {
     var x: Int
     init(_ v: Int) { self.x = v }
     init(b: Bool) {
@@ -304,7 +305,7 @@ actor Bob {
         }
         self.x = 2 // 初期化完了
 
-        f() // ⭕️ エグゼキュータ上にいる
+        f() // ⭕️ actorのエグゼキュータ上にいる
     }
 }
 ```
@@ -417,7 +418,7 @@ actor Charlie {
 ```
 
 この例のポイントは、`if else`で複数の制御フローがイニシャライザに導入されていること。
-最初の条件分岐の中で複数回`self`の`nonisolated`な使用をしている。一方の分岐(`else if`)ではまだ`score`への読み書きはできる。一方で`if else`の後の`assert`の時点では、ここに到達できるブロックの一つで、`self`が非分離に使用されているため、`self`は`nonisolated`とみなされる。
+最初の条件分岐の中で複数回`self`の`nonisolated`な使用をしている。一方の分岐(`else if`)ではまだ`score`への読み書きはできる。一方で`assert`の時点では、ここに到達できるブロックの一つで、`self`が`nonisolated`に使用されているため、`self`は`nonisolated`とみなされる。
 
 結果的に、`self`が`nonisolated self`になった後は、アクセス可能な唯一の格納プロパティは`let`で宣言された`Sendable`なもののみとなる。それ以外の格納プロパティへ不正にアクセスした場合は、分離の衰退が発生した不正アクセスよりも前に`self`を使用した場所の一つを指摘する。これは制御フローの観点で、プログラム上のどこに現れるかではない(不正アクセスより下に記述されていたとしても実行順序が先の場合はそこのポイントが指摘される)。
 
@@ -531,6 +532,12 @@ class ProtectedByExecutor<T: Equatable> {
 
 `nonisolated`な格納プロパティを持つGAITは、データ競合を防ぐために、既存の`Sendable`の制限に頼っている。
 
+##### actorイニシャライザのルールを簡単にまとめると
+
+- asyncイニシャライザはactorに分離されていて、他のイニシャライザと同じように機能する: `self`を使う前に全ての格納プロパティを初期化する必要があるメソッドと見なせる。
+- non-asyncイニシャライザはactorに分離されておらず、`self`を使う前に全ての格納プロパティを初期化する必要がある`nonisolated`メソッドと同様。しかし、一度格納プロパティ以外で`self`でアクセスした場合、イニシャライザ内のそれ以降では、格納プロパティにできなくなるというところは異なる。
+- actor型のglobal-actorに分離されたイニシャライザや`nonisolated`のasyncイニシャライザなどの例外ケースでは、non-asyncイニシャライザと同じカテゴリになる。
+
 #### 委譲イニシャライザ
 
 ここではactor型とGAITsの委譲イニシャライザに関するシンタックスとルールを定義する。
@@ -558,7 +565,7 @@ actorの非委譲イニシャライザでは、`self`にFlow-sensitive分離が�
 
 ```swift
 class NotSendableType { /* ... */ }
-struct Piece: Sendable { /* ... */ }
+`struct` Piece: Sendable { /* ... */ }
 
 actor Greg {
     var ns: NonSendableType
@@ -589,7 +596,7 @@ actor Greg {
 
 ```swift
 class NotSendableType { /* ... */ }
-struct Piece: Sendable { /* ... */ }
+`struct` Piece: Sendable { /* ... */ }
 
 actor Gene {
     var ns: NonSendableType?
@@ -679,7 +686,8 @@ var y = x + 2
 
 ##### 冗長な分離の削除
 
-global-actorに分離されている格納プロパティは、その値を保持している型のインスタンスのストレージへの安全な同時並行アクセスを提供している。例えば`pid`はactorに分離された格納プロパティの場合、`p.pid.reset()`は`p`から`pid`を読み取る時のみメモリは守られていて、その後の`reset()`は安全に呼ばれない。そのためstructやenumといった値型では、global-actorに分離された格納プロパティは意味をなさない。値型の格納プロパティのストレージの変更はCOW(Copy on write)のお陰でデフォルトでは安全に同時並行に行える。そこで、これらのプロパティへのアクセスは分離する要件は削除する。つまり、これらの格納プロパティの読み書きに`await`は必要ない。
+global-actorに分離されている格納プロパティは、その値を保持している型のインスタンスのストレージへの安全な同時並行アクセスを提供している。例えば`pid`はactorに分離された格納プロパティの場合、`p.pid.reset()`は`p`から`pid`を読み取る時のみメモリは守られていて、その後の`reset()`は安全に呼ばれない。そのため`struct`や`enum`といった値型では、global-actorに分離された格納プロパティは意味をなさない。値型の格納プロパティのストレージの変更はCOW(Copy on write)のお陰でデフォルトで安全に行える。
+そこで、値型のプロパティに設定されているglobal-actor分離(アノテーション)の要件を削除する。つまり、これらの格納プロパティの読み書きに`await`は必要なくなる。
 
 [global actorのプロポーザル](https://github.com/apple/swift-evolution/blob/main/proposals/0316-global-actors.md#detailed-design)では、actorはglobal-actorの格納プロパティを保持できないと明記されているが、Swift5.5ではこれが強制されていない。これは強制されるべき(例えば、actorストレージはactorインスタンスに一貫して分離されるべき)。こうすると、スレッド間のfalse sharing(※)の可能性を減らすことができる。具体的には、常にactorインスタンスで使用しているメモリへの書き込みアクセスは一つのスレッドのみになる。
 
@@ -692,7 +700,7 @@ https://en.wikipedia.org/wiki/False_sharing
 
 変更不要、もしくは自動修正可能な点
 
-- Swift5.5で定義した`init`はより厳密なルールがあるので変更の必要はない
+- Swift5.5で定義した`init`はより厳密なルール下にあるので変更の必要はない
 - actorイニシャライザの`convenience`修飾子は無視されるかfix-itが出力される
 - (値型の)通常の格納プロパティの余分なglobal-actor分離は無視されるかfix-itが出力される
 
