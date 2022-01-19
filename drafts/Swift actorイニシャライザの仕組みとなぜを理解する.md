@@ -590,7 +590,7 @@ actor Greg {
 
 ##### 委譲とSendable
 
-全ての委譲イニシャライザが任意の呼び出しでnon-Sendableの値を受け取れる訳ではない。non-Sendableを安全に渡せるかどうかは呼び出し側の分離状態次第になる。
+全ての委譲イニシャライザが任意の呼び出しでnon-Sendableの値を受け取れる訳ではない。non-Sendableを委譲イニシャライザに安全に渡せるかどうかは呼び出し側の分離状態次第になる。
 
 例えば、`async`委譲イニシャライザは`isolated self`である。そのため、委譲後にも格納プロパティにアクセスできる。もしnon-Sendableな値を呼び出し側の分離状態を考慮せずに使えるようにしてしまった場合、non-Sendableの不正な共有が起きる可能性がある。
 
@@ -803,6 +803,7 @@ Flow-sensitive分離での`async`なプロパティへのアクセスをサポ�
 
 - [[SE-327] Implement Flow-sensitive actor isolation for actor inits](https://github.com/apple/swift/pull/40028)
 - [[SE-327] Remove redundant global-actor isolation](https://github.com/apple/swift/pull/40868)
+- [[SE-327] Reimplement: make initializing expressions for member stored properties nonisolated](https://github.com/apple/swift/pull/40908)
 
 ### その他
 
