@@ -445,10 +445,10 @@ public final class ManualClock: Clock, @unchecked Sendable {
 - [SE-0329: Clock, Instant, Date, and Duration](https://forums.swift.org/t/se-0329-clock-instant-date-and-duration/53309)
 - [[Pitch (back from revision)] Clock, Instant, and Duration](https://forums.swift.org/t/pitch-back-from-revision-clock-instant-and-duration/54035)
 - [SE-0329 (Second Review): Clock, Instant, and Duration](https://forums.swift.org/t/se-0329-second-review-clock-instant-and-duration/54509)
-
+https://forums.swift.org/t/se-0329-third-review-clock-instant-and-duration/54727
 ### プロポーザルドキュメント
 
-- [Clock, Instant, and Duration](https://github.com/apple/swift-evolution/blob/main/proposals/0329-clock-instant-date-duration.md)
+- [Clock, Instant, and Duration](https://github.com/apple/swift-evolution/blob/main/proposals/0329-clock-instant-duration.md)
 
 ### 関連PR
 
