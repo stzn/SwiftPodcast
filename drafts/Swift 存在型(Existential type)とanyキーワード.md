@@ -23,6 +23,7 @@
     - [Forums](#forums)
     - [プロポーザルドキュメント](#プロポーザルドキュメント)
     - [関連PR](#関連pr)
+    - [その他](#その他)
 
 ## 概要
 
@@ -32,9 +33,9 @@ Swift6で存在型(Existential type)を書く際に`any`キーワードが必須
 
 ### 存在型(Existential type)とは?
 
-ある条件を満たす全ての型を表す型。SwiftではProtocol型がこれに当たる。
+ある条件を満たす全ての型を表す型。Swiftではプロトコルを型として使用した場合にがこれに該当する。
 
-例: Animalプロトコルに準拠したDog構造体とCat構造体はAnimal型として扱うことができる。
+例: `Animal`プロトコルに準拠した`Dog`構造体と`Cat`構造体は`Animal`型として扱うことができる。
 
 ```swift
 protocol Animal {}
@@ -59,9 +60,20 @@ dog = Cat() // ok
 
 #### 機能面での制限
 
+- 型として利用できない場合がある。
+
+下記の場合、プロトコルを型として扱うことはできない。
+
+1. 関連型(`associatedtype`)が要件に含まれている
+2. メソッド/プロパティ/subscript/イニシャライザの共変ではない位置(引数など)に`Self`への参照が含まれている
+
+※ ただし、この問題は解決される予定。
+
+関連ドキュメント: https://github.com/apple/swift-evolution/blob/main/proposals/0309-unlock-existential-types-for-all-protocols.md
+
 - 型情報が消去されているため、使える機能が制限される。
 
-例えば、下記の2つのcalleeの戻り値の型は同じであることがわからないので加算できない。
+例えば、下記の2つの`callee`の戻り値の型は同じであることがわからないので加算できない。
 
 ```swift
 func callee() -> Numeric {
@@ -77,9 +89,22 @@ func caller() {
 }
 ```
 
-- associatedtypeを持つプロトコルはプロトコル自身に準拠できず、マニュアルで型消去などの実装が必要になる(※できるようになる予定)
+- 関連型を持つプロトコルの存在型はそのプロトコル自身に準拠できず、マニュアルで型消去などの実装が必要になる。これは関連型の型がわからないから。
 
-関連ドキュメント: https://github.com/apple/swift-evolution/blob/main/proposals/0309-unlock-existential-types-for-all-protocols.md
+```swift
+protocol P {
+  associatedtype A
+  func test(a: A)
+}
+
+func generic<ConcreteP: P>(p: ConcreteP, value: ConcreteP.A) {
+  p.test(a: value)
+}
+
+func useExistential(p: P) {
+  generic(p: p, value: ???) // P.Aの値の型は何？
+}
+```
 
 #### パフォーマンス面の問題
 
@@ -326,9 +351,16 @@ extension Array {
 ### プロポーザルドキュメント
 
 - [Introduce existential any](https://github.com/apple/swift-evolution/blob/main/proposals/0335-existential-any.md)
-- [Unlock existential for all protocols](https://github.com/apple/swift-evolution/blob/main/proposals/0309-unlock-existential-types-for-all-protocols.md)
 
 ### 関連PR
 
 - [[SE-0335] Enable explicit existential types.](https://github.com/apple/swift/pull/40666)
 - [[5.6][SE-0335] Enable explicit existential types.](https://github.com/apple/swift/pull/40804)
+
+- [[5.6][SE-0335] Enable explicit existential types.](https://github.com/apple/swift/pull/40949)
+
+### その他
+
+- [Unlock existential for all protocols](https://github.com/apple/swift-evolution/blob/main/proposals/0309-unlock-existential-types-for-all-protocols.md)
+
+- [Protocols as Types](https://docs.swift.org/swift-book/LanguageGuide/Protocols.html#ID275)
