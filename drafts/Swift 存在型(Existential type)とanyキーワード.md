@@ -26,7 +26,7 @@
 
 ## 概要
 
-Swift6で存在型(Existential type)を書く際に`any`キーワードを必須にすることが提案されている。その理由や内容について見ていく。
+Swift6で存在型(Existential type)を書く際に`any`キーワードが必須になる。その理由や内容について見ていく。
 
 ## 内容
 
@@ -44,7 +44,7 @@ struct Cat: Animal {}
 let animals: [Animal] = [Dog(), Cat()]
 ```
 
-存在値を変更すると、異なる具体的な型に変更できる。
+存在型には、異なる具体的な型を代入できる。
 
 ```swift
 var dog: Animal = Dog()
