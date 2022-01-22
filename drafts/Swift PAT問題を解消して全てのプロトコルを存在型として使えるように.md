@@ -1,16 +1,18 @@
-# Swift 全てのプロトコルを存在型として使えるように
+# Swift PAT問題を解消して全てのプロトコルを存在型として使えるように
 
-- [Swift 全てのプロトコルを存在型として使えるように](#swift-全てのプロトコルを存在型として使えるように)
+- [Swift PAT問題を解消して全てのプロトコルを存在型として使えるように](#swift-pat問題を解消して全てのプロトコルを存在型として使えるように)
   - [概要](#概要)
   - [内容](#内容)
     - [問題点](#問題点)
-      - [型消去ラッパ](#型消去ラッパ)
     - [解決策](#解決策)
     - [使用できない場合](#使用できない場合)
     - [コンパイラチェック](#コンパイラチェック)
     - [不適合な存在型](#不適合な存在型)
     - [既知の実装を伴った関連型](#既知の実装を伴った関連型)
     - [関連型の共変消去](#関連型の共変消去)
+      - [Library Evolution観点でのメリット](#library-evolution観点でのメリット)
+      - [型消去ラッパ観点でのメリット](#型消去ラッパ観点でのメリット)
+    - [いつ導入される？](#いつ導入される)
     - [将来的な話](#将来的な話)
       - [Standard Libraryの`AnyHashable`と`AnyCollection`などの実装を簡単にする](#standard-libraryのanyhashableとanycollectionなどの実装を簡単にする)
       - [存在型の「強調」を抑える](#存在型の強調を抑える)
@@ -44,14 +46,16 @@ Protocol can only be used as a generic constraint because it has 'Self' or assoc
 - 異なる同じ制約を満たした型に再代入できない
 
 このドキュメントでは、存在型の値、存在型として使われているプロトコルやプロトコルを組み合わせたものを全て「存在型」と呼ぶ。
-また、関連型(`associatedtype`)の要件（宣言）と関連型(依存メンバ型)を区別する(例えば、`Self.Element`と`Self.SubSequence.Element`は同じ関連型の要件を示す別の関連型と見なす)。
+また、関連型(associated type)の要件（宣言）と関連型(依存メンバ型)を区別する(例えば、`Self.Element`と`Self.SubSequence.Element`は同じ関連型の要件を示す別の関連型と見なす)。
 
 ### 問題点
 
 コンパイラは、下記の条件を除いてプロトコルを型として使うことを許可している。
 
-1. 関連型(`associatedtype`)が要件に含まれている
+1. 関連型が要件に含まれている
 2. メソッド/プロパティ/subscript/イニシャライザの共変ではない位置(引数など)に`Self`への参照が含まれている
+
+これがいわゆるPAT(Protocol with associated types)問題。
 
 ```swift
 // 'Identifiable'は関連型を要件に持つ
@@ -61,7 +65,7 @@ public protocol Identifiable {
   var id: ID { get }
 }
 
-// 'Equatable'は反変の位置でSelfを参照する操作メソッドwお要件に持つ
+// 'Equatable'は反変の位置でSelfを参照する操作メソッドを要件に持つ
 public protocol Equatable {
   static func == (lhs: Self, rhs: Self) -> Bool
 }
@@ -69,8 +73,8 @@ public protocol Equatable {
 
 同じようにエラーになるが、下記の2つに分かれる。
 
-1. 関連型のメタデータを動的に解析できないプロトコルwitness tableの不完全な実装が残っているため
-2. 個々のメンバへのアクセスを型安全にする意図がある。次の例で考えてみる。
+1. 関連型のメタデータを動的に解析できないprotocol witness tableの不完全な実装が残っているため
+2. 個々のメンバへのアクセスを型安全にする意図がある。次の例で考えてみる
 
 ```swift
 protocol P {
@@ -106,51 +110,7 @@ extension Animal {
 }
 ```
 
-このセマンティックの不一致があることで既存のプロトコルを存在型として使えなくなることを恐れてプロトコルを改善するプロセスの妨げにもなる。
-
-#### 型消去ラッパ
-
-型消去の実装は、単純に`Any`やクロージャで実際の値を隠す代わりに、コンパイラの最適化や将来的なABIとの互換性を考慮した方法で書くこともできる。
-存在型に直接アクセスできない要件の場合、プロトコル拡張メソッドを介して呼び出しを転送し、内部の値を開いて、プロトコル拡張内からプロトコルインターフェイスに完全にアクセスすることができる。
-
-```swift
-protocol Foo {
-    associatedtype Bar
-
-    func foo(_: Bar) -> Bar
-}
-
-private extension Foo {
-    // Forward to the foo method in an existential-accessible way, asserting that
-    // the '_Bar' generic argument matches the actual 'Bar' associated type of the
-    // dynamic value.
-    func _fooThunk<_Bar>(_ bar: _Bar) -> _Bar {
-        assert(_Bar.self == Bar.self)
-        let result = foo(unsafeBitCast(bar, to: Bar.self))
-        return unsafeBitCast(result, to: _Bar.self)
-    }
-}
-
-struct AnyFoo<Bar>: Foo {
-    private var _value: Foo
-
-    init<F: Foo>(_ value: F) where F.Bar == Bar {
-        self._value = value
-    }
-
-    func foo(_ bar: Bar) -> Bar {
-        return self._value._fooThunk(bar)
-    }
-}
-
-func f(_ f: Foo) {
-    f.foo(1 as! Foo.Bar) // ❌　Associated type 'Bar' can only be used with a concrete type or generic parameter base
-}
-
-func f(_ f: AnyFoo<Int>) {
-    f.foo(1) // ⭕️
-}
-```
+現在は、このセマンティックの不一致があることで既存のプロトコルを存在型として使えなくなることを恐れてプロトコルを改善するプロセスの妨げにもなる。
 
 ### 解決策
 
@@ -166,7 +126,7 @@ array.append(9) // ⭕️ Self.ElementはIntだとわかっている
 
 関連値がただ存在することでメンバへのアクセスが制限されるという制限はなくなるが、`Self`をルートに持つ関連型は、`Self`にされる制限と同じ制限が発生する。
 
-例えば、共変位置でのの`Self`は既に利用可能だが、
+例えば、共変位置での`Self`は既に利用可能だが、
 
 ```swift
 protocol Copyable {
@@ -183,13 +143,15 @@ func test(_ c: Copyable) {
 ```swift
 func test(_ collection: RandomAccessCollection) {
   // func dropLast(_ k: Int = 1) -> SubSequence
-  let x = collection.dropLast() // ⭕️xはRandomAccessCollection型
+  let x = collection.dropLast() // ⭕️ xはRandomAccessCollection型
 }
 ```
 
-まとめると、プロトコルとプロトコル拡張のメンバ(メソッド/プロパティ/subscript/イニシャライザ)は存在型として使える。ただし、下記は除く
+このように、プロトコルとプロトコル拡張のメンバ(メソッド/プロパティ/subscript/イニシャライザ)で存在型の値を使える。
 
-関連するメンバの型が、基となる型のコンテキストから見える時に、共変以外の位置に`Self`や`Self`をルートに持つ関連型を参照している場合
+ただし、下記はできない。
+
+基となるプロトコルのコンテキストから見た時に、メンバへのアクセサの型に共変以外の位置の`Self`や`Self`をルートに持つ関連型の参照がある場合
 
 ※ これらは共変と見なされる
 
@@ -198,6 +160,7 @@ func test(_ collection: RandomAccessCollection) {
 - `Wrapped`型の`Optional`
 - `Element`型の`Array`
 - `Value`型の`Dictionary`
+
 
 ### 使用できない場合
 
@@ -261,7 +224,7 @@ protocol Q: P where B == G<A> {}
 
 ### 不適合な存在型
 
-この制限によって不思議な副作用が発生する。準拠できない存在型が拡がる。
+この制限によって不思議な副作用が発生する。準拠できない存在型が生まれてしまう。
 
 例えば、2つの無関係なプロトコルが同じ関連型を持ち、別の具体的な型で制約を設定した場合
 
@@ -314,6 +277,61 @@ func testComposition(arg: Q & Class) {
 メンバにアクセスする際、`Self`ルートの関連型が「既知の実装を持っていない、かつアクセスするメンバの型の中の共変の位置に現れている」場合、
 メンバにアクセスするために使われた存在型のジェネリックシグネチャごとにその上位の制約へと消去される。
 上位の制約は、関連型のジェネリック制約の存在と種類によってclass、プロトコル、プロトコル合成、`Any`のいづれかになる。そのため、これらの関連型への参照があっても存在値のメンバにアクセスすることができる。
+
+#### Library Evolution観点でのメリット
+
+この制限を解除することでライブラリ側でプロトコルにデフォルトの要件を追加しても既存の利用に影響を与えることがなくなり、バイナリやソースの互換性を保つことができる。
+
+#### 型消去ラッパ観点でのメリット
+
+将来的にはより存在型を汎用的にする計画が進んでいるが、この制限緩和によって手動で作成していた`AnySequence`などの型消去ラッパ(type erase)を実装の提供側で必要なくなる。
+型消去の実装は、単純に`Any`やクロージャで実際の値を隠す代わりに、コンパイラの最適化や将来的なABIとの互換性を考慮した方法で書くこともできる。今回の制限の緩和によって存在型に直接アクセスできない要件の場合でも、プロトコル拡張メソッドを介して呼び出しを転送し、内部の値を開いて、プロトコル拡張内からプロトコルインターフェイスに完全にアクセスすることができる。
+
+```swift
+protocol Foo {
+    associatedtype Bar
+
+    func foo(_: Bar) -> Bar
+}
+
+private extension Foo {
+    // Forward to the foo method in an existential-accessible way, asserting that
+    // the '_Bar' generic argument matches the actual 'Bar' associated type of the
+    // dynamic value.
+    func _fooThunk<_Bar>(_ bar: _Bar) -> _Bar {
+        assert(_Bar.self == Bar.self)
+        let result = foo(unsafeBitCast(bar, to: Bar.self))
+        return unsafeBitCast(result, to: _Bar.self)
+    }
+}
+
+struct AnyFoo<Bar>: Foo {
+    private var _value: Foo
+
+    init<F: Foo>(_ value: F) where F.Bar == Bar {
+        self._value = value
+    }
+
+    func foo(_ bar: Bar) -> Bar {
+        return self._value._fooThunk(bar)
+    }
+}
+
+func f(_ f: Foo) {
+    f.foo(1 as! Foo.Bar) // ❌ Associated type 'Bar' can only be used with a concrete type or generic parameter base
+}
+
+func f(_ f: AnyFoo<Int>) {
+    f.foo(1) // ⭕️
+}
+```
+
+関連ドキュメント
+https://github.com/apple/swift/blob/main/docs/GenericsManifesto.md#generalized-existentials
+
+### いつ導入される？
+
+2021/05時点でdeAcceptedになったが、実装が完了したという報告はまだない。masterリポジトリなどでは一部使用可能になっているので近々完了するかもしれない。(随時更新)
 
 ### 将来的な話
 
