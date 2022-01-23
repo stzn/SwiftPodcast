@@ -3,7 +3,7 @@
 - [Swift PAT問題を解消して全てのプロトコルを存在型として使えるように](#swift-pat問題を解消して全てのプロトコルを存在型として使えるように)
   - [概要](#概要)
   - [内容](#内容)
-    - [問題点](#問題点)
+    - [存在型の問題点](#存在型の問題点)
     - [解決策](#解決策)
     - [使用できない場合](#使用できない場合)
     - [コンパイラチェック](#コンパイラチェック)
@@ -40,6 +40,25 @@ Protocol can only be used as a generic constraint because it has 'Self' or assoc
 
 存在型は「入れ物」のようなもので、ある制約を満たす任意の型を動的にいつでも入れ替えることができる。同じ存在型の値に、同じ制約を満たす型の具体的な型情報を抽象化して、存在型として同じように使うことができる。
 
+例: `Animal`プロトコルに準拠した`Dog`構造体と`Cat`構造体は`Animal`型として扱うことができる。
+
+```swift
+protocol Animal {}
+struct Dog: Animal {}
+struct Cat: Animal {}
+
+let animals: [Animal] = [Dog(), Cat()]
+```
+
+存在型には、異なる具体的な型を代入できる。
+
+```swift
+var dog: Animal = Dog()
+dog = Cat() // ok
+```
+
+関連ドキュメント: https://docs.swift.org/swift-book/LanguageGuide/Protocols.html#ID275
+
 ※ これとは反対の`some`キーワードのついた型は
 
 - ある制約を満たしたある特定の型を表す
@@ -48,7 +67,7 @@ Protocol can only be used as a generic constraint because it has 'Self' or assoc
 このドキュメントでは、存在型の値、存在型として使われているプロトコルやプロトコルを組み合わせたものを全て「存在型」と呼ぶ。
 また、関連型(associated type)の要件（宣言）と関連型(依存メンバ型)を区別する(例えば、`Self.Element`と`Self.SubSequence.Element`は同じ関連型の要件を示す別の関連型と見なす)。
 
-### 問題点
+### 存在型の問題点
 
 コンパイラは、下記の条件を除いてプロトコルを型として使うことを許可している。
 
