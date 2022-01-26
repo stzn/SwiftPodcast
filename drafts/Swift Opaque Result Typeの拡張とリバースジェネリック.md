@@ -2,15 +2,9 @@
 
 - [Swift Opaque Result Typeの拡張とリバースジェネリック](#swift-opaque-result-typeの拡張とリバースジェネリック)
   - [概要](#概要)
+  - [用語](#用語)
   - [内容](#内容)
     - [Opaque Result Typeとは？](#opaque-result-typeとは)
-    - [Swift5.6で何が変わる？](#swift56で何が変わる)
-      - [構造的位置(structural position)とは?](#構造的位置structural-positionとは)
-      - [問題点](#問題点)
-    - [解決策](#解決策)
-      - [Optionalの書き方](#optionalの書き方)
-      - [高階関数(Higher order functions)](#高階関数higher-order-functions)
-      - [ジェネリック制約の推論](#ジェネリック制約の推論)
     - [リバースジェネリック(Reverse generics)](#リバースジェネリックreverse-generics)
       - [通常のジェネリック](#通常のジェネリック)
       - [リバースジェネリックの場合](#リバースジェネリックの場合)
@@ -23,6 +17,14 @@
       - [通常のジェネリックとリバースジェネリックの組み合わせ](#通常のジェネリックとリバースジェネリックの組み合わせ)
       - [where句を使った型制約も同じように設定できる(可能性がある)](#where句を使った型制約も同じように設定できる可能性がある)
       - [より複雑な型も同じように扱える](#より複雑な型も同じように扱える)
+    - [Swift5.7で何が変わる？](#swift57で何が変わる)
+      - [問題点](#問題点)
+    - [解決策](#解決策)
+      - [Optionalの書き方](#optionalの書き方)
+      - [高階関数(Higher order functions)](#高階関数higher-order-functions)
+      - [ジェネリック制約の推論](#ジェネリック制約の推論)
+    - [結局どこで使えるの？](#結局どこで使えるの)
+    - [Named Opaque Result Type](#named-opaque-result-type)
     - [将来的な話](#将来的な話)
   - [参考リンク](#参考リンク)
     - [Forums](#forums)
@@ -34,14 +36,21 @@
 
 Swift5.1で導入されたOpaque Result Typeが構造的位置(structural position)でも使えるようになった。
 
-※ structural positionとは?
-`String`や`int`などの全体の型ではなく、ジェネリックの型変数やTuple、関数型の一部などで型を指定する位置を指す
+## 用語
+
+- 構造的型(structural type)  
+`String`や`Int`などの名前的型(nominal type)ではなく、ジェネリックの型パラメータやタプル、関数型の一部、配列の要素などの型  
+関連ドキュメント: https://docs.swift.org/swift-book/ReferenceManual/Types.html
+
+- 構造的位置(structural position)  
+構造的型内の位置を指す
+
 
 ## 内容
 
 ### Opaque Result Typeとは？
 
-Opaque Typeとは、具体的な型の情報を保持しつつ、具体的な型からは抽象化された方法で提供される型。  
+Opaque Typeとは、具体的な型の情報を保持しつつ、抽象化された方法で提供される型。  
 
 https://docs.swift.org/swift-book/LanguageGuide/OpaqueTypes.html
 
@@ -55,93 +64,66 @@ var body: some View { ... }
 
 メリット
 
+- 型情報が保持されているため、存在型と比べて使える機能が多い
 - 呼び出し側に不要な詳細情報が漏れない
 - 実装側で実装を変更しても戻り値が抽象化されているため、実装の変更が呼び出し側に影響を与えない
 - (現状)associated typeやSelfを要件に使っている場合に存在型(プロトコルを型として使用した型)として使用できない場面でも使用できる
 
+存在型の場合
+
+```swift
+func callee() -> Numeric {
+    if Bool.random() {
+        return 42
+    } else {
+        return 1
+    }
+}
+
+func caller() {
+    let x = callee() + callee() // ❌ Binary operator '+' cannot be applied to two 'Numeric' operands
+}
+```
+
+Opaque Result Typeの場合
+
+```swift
+func callee() -> some Numeric {
+    if Bool.random() {
+        return 42
+    } else {
+        return 1
+    }
+}
+
+func caller() {
+    let x = callee() + callee() // ⭕️
+}
+```
+
 デメリット
 
-- 戻り値は全実行パスで同じ型である必要がある(SwiftUIでは、これを解決するためにiOS14でViewBuilderが導入された)  
+- 戻り値は全実行パスで同じ型である必要がある(SwiftUIでは、これを解決するためにSwift5.3で@ViewBuilderが導入された)
+
+
+```swift
+func callee() -> some Numeric { // ❌ Function declares an opaque return type, but the return statements in its body do not have matching underlying types
+    if Bool.random() {
+        return 42
+    } else {
+        return 42.1
+    }
+}
+```
+
+
 https://developer.apple.com/documentation/swiftui/viewbuilder
-
-### Swift5.6で何が変わる？
-
-#### 構造的位置(structural position)とは?
-
-`String`や`Int`などの型全体ではなく、ジェネリックの型変数やTuple、関数型の一部などで型を指定する位置を指す。
-
-https://docs.swift.org/swift-book/ReferenceManual/Types.html
-
-#### 問題点
-
-現在はこの構造的位置にOpaque Result Typeが使えない。
-
-```swift
-
-func f0() -> (some P)? { /* ... */ } // ❌
-
-func f1() -> (some P, some Q) { /* ... */ } // ❌
-
-func f2() -> () -> some P { /* ... */ } // ❌
-
-func f3() -> S<some P> { /* ... */ } // ❌
-```
-
-### 解決策
-
-この制限を解除する。
-
-#### Optionalの書き方
-
-`(some P)?`、`(some P)!`と書く。
-`some P?`と書くと`some Optional<P>`となってエラーになる。Opaque Typeは`Any`, `AnyObject`、プロトコル合成、加えて/またはbase classに制限されなければならない。
-
-#### 高階関数(Higher order functions)
-
-関数型の引数と戻り値どちらにも使える。
-
-```swift
-func f() -> () -> some P
-func g() -> (some P) -> ()
-```
-
-#### ジェネリック制約の推論
-
-型変数のジェネリック制約が関数のシグニチャの構造的位置で使用される場合、コンパイラは使用されるコンテキストに基づいて型変数のジェネリック制約を暗黙的に制約する。
-
-```swift
-struct H<T: Hashable> { init(_ t: T) {} }
-struct S<T>{ init(_ t: T) {} }
-
-// 'f<T: Hashable>'と同じ。 `H<T>`は暗黙的に`T: Hashable'と推論される
-func f<T>(_ t: T) -> H<T> {
-    var h = Hasher()
-    h.combine(t) // OK - 'T: Hashable'だとわかる
-    let _ = h.finalize()
-    return H(0)
-}
-
-// 'S<T>'は'T'について何も示していない
-func g<T>(_ t: T) -> S<T> {
-    var h = Hasher()
-    h.combine(t) // ERROR - instance method 'combine' requires that 'T' conform to 'Hashable'
-    let _ = h.finalize()
-    return S(0)
-}
-```
-
-Opaque Result Typeでは、この型推論は効かない。
-
-```swift
-// ERROR - type 'some P' does not conform to protocol 'Hashable'
-func f<T>(_ t: T) -> H<some P> { /* ... */ }
-```
 
 ### リバースジェネリック(Reverse generics)
 
 Opaque Result Typeは、通常のジェネリックとは異なり、リバースジェネリックと呼ばれている。
 
-リバースジェネリックとは、通常のジェネリクスと概念としては同じだけど方向が、**逆になる(Reverseする)**ジェネリックを指す。
+リバースジェネリックとは、通常のジェネリクスと概念としては同じだけど方向が、**逆になる**(Reverseする)ジェネリックを指す。
 
 #### 通常のジェネリック
 
@@ -175,10 +157,9 @@ Opaque Result Typeを使って考えてみる。
 ```swift
 
 // リバースジェネリック
-func callee -> some Numeric {
-  // calleeがTの具体的な型を決める
-  // conforms to the Numeric protocol. In this case the concrete type
-  // この場合、Tの具体的な型はIntになる
+func callee() -> some Numeric {
+  // calleeがsome Numericの具体的な型を決める
+  // この場合、some Numericの具体的な型はIntになる
   return 42
 }
 
@@ -195,8 +176,8 @@ func caller() {
 
 上記の関数では、
 
-- 通常のジェネリック: **`caller`**関数が具体的な型のIntを使って処理をする。**`callee`**関数はあるNumericプロトコルに準拠した型を使って処理をする。
-- リバースジェネリック: **`callee`**関数が具体的な型のIntを使って処理をする。**`caller`**関数はあるNumericプロトコルに準拠した型を使って処理をする。
+- 通常のジェネリック: `caller`関数が具体的な型のIntを使って処理をする。`callee`関数はあるNumericプロトコルに準拠した型を使って処理をする。
+- リバースジェネリック: `callee`関数が具体的な型のIntを使って処理をする。`caller`関数はあるNumericプロトコルに準拠した型を使って処理をする。
 
 ※ 下記は`caller`関数で具体的な型を決められないため正しく機能しない
 
@@ -274,7 +255,7 @@ func callee() -> some T {
 ```swift
 // リバースジェネリック
 func caller() {
-  let x = callee() + callee() // 両方のリバースジェネリッのcallee関数は
+  let x = callee() + callee() // 両方のリバースジェネリックのcallee関数は
                               // 同じ具体的な型のcallee.Tを返す
                               // そしてNumericに準拠しているため、加算できる
 }
@@ -361,6 +342,146 @@ func makeCollections<T>(with element: T) -> <C: Collection where .Element == T, 
 関連スレッド: https://forums.swift.org/t/reverse-generics-and-opaque-result-types/21608  
 関連PR: https://github.com/apple/swift/pull/40715
 
+### Swift5.7で何が変わる？
+
+Opaque Result Typeが構造的位置でも使えるようになった。
+
+#### 問題点
+
+現在はこの構造的位置にOpaque Result Typeが使えない。
+
+```swift
+
+func f0() -> (some P)? { /* ... */ } // ❌
+
+func f1() -> (some P, some Q) { /* ... */ } // ❌
+
+func f2() -> () -> some P { /* ... */ } // ❌
+
+func f3() -> S<some P> { /* ... */ } // ❌
+```
+
+### 解決策
+
+この制限を解除する。
+
+#### Optionalの書き方
+
+`(some P)?`、`(some P)!`と書く。
+`some P?`と書くと`some Optional<P>`となってエラーになる。Opaque Typeは`Any`, `AnyObject`、プロトコル合成、加えて/またはbase classに制限されなければならない。
+
+#### 高階関数(Higher order functions)
+
+⭕️ 関数型の戻り値の型に使える。
+
+```swift
+func f() -> () -> some P
+```
+
+❌ 関数型の引数には使えない。(Accepted時に変更になった)
+
+```swift
+func g() -> (some P) -> Void //❌ 'some' cannot appear in parameter position in result type '(some P) -> Void'
+
+typealias Takes<T> = (T) -> Void
+func indirectOpaqueParameter() -> Takes<some P> {} // ❌ 'some' cannot appear in parameter position in result type 'Takes<some P>' (aka '(some P) -> ()')
+```
+
+
+#### ジェネリック制約の推論
+
+型変数のジェネリック制約が関数のシグニチャの構造的位置で使用される場合、コンパイラは使用されるコンテキストに基づいて型変数のジェネリック制約を暗黙的に制約する。
+
+```swift
+struct H<T: Hashable> { init(_ t: T) {} }
+struct S<T>{ init(_ t: T) {} }
+
+// 'f<T: Hashable>'と同じ。 `H<T>`は暗黙的に`T: Hashable'と推論される
+func f<T>(_ t: T) -> H<T> {
+    var h = Hasher()
+    h.combine(t) // OK - 'T: Hashable'だとわかる
+    let _ = h.finalize()
+    return H(0)
+}
+
+// 'S<T>'は'T'について何も示していない
+func g<T>(_ t: T) -> S<T> {
+    var h = Hasher()
+    h.combine(t) // ERROR - instance method 'combine' requires that 'T' conform to 'Hashable'
+    let _ = h.finalize()
+    return S(0)
+}
+```
+
+Opaque Result Typeでは、この型推論は効かない。
+
+```swift
+// ERROR - type 'some P' does not conform to protocol 'Hashable'
+func f<T>(_ t: T) -> H<some P> { /* ... */ }
+```
+
+### 結局どこで使えるの？
+
+Testを見て確認するのが一番わかりやすい
+
+関連ソース:  
+https://github.com/apple/swift/blob/main/test/type/opaque_return_structural.swift  
+https://github.com/apple/swift/blob/main/test/type/opaque.swift
+
+### Named Opaque Result Type
+
+このプロポーザルでは直接言及されていないが、別のForumのスレッドでOpaque Result Typesについて残りのタスクについての記載がある。
+その中の一つがNamed Opaque Result Type。戻りに名前をつけて、制約を設定できるようにする。
+
+例えば、標準ライブラリの`zip`メソッドで考えてみる。Named Opaque Result Typeがない場合、`Sequence1`と`Sequence2`を組みわせた結果を返すために`Zip2Sequence`が必要になる。
+
+```swift
+func zip<Sequence1: Sequence, Sequence2: Sequence>
+(_ sequence1: Sequence1, _ sequence2: Sequence2) -> Zip2Sequence<Sequence1, Sequence2>
+```
+
+Named Opaque Result Typeがあると、戻り値の制約を`where`句で設定できるため、余計な型が不要になる。
+
+```swift
+func zip<Sequence1, Sequence2>
+(_ sequence1: Sequence1, _ sequence2: Sequence2) -> <Sequence3> Sequence3
+where Sequence1: Sequence,
+Sequence2: Sequence,
+Sequence3: Sequence,
+Sequence3.Element == (Sequence1.Element, Sequence2.Element)
+```
+
+さらに直接制約をカギ括弧内に書けるようにもなる。
+
+```swift
+func zip<Sequence1: Sequence, Sequence2: Sequence>
+(_ sequence1: Sequence1, _ sequence2: Sequence2) -> <Sequence3: Sequence> Sequence3
+where Sequence3.Element == (Sequence1.Element, Sequence2.Element)
+```
+
+```swift
+func zip<Sequence1: Sequence, Sequence2: Sequence>
+(_ sequence1: Sequence1, _ sequence2: Sequence2) 
+-> <Sequence3: Sequence where Sequence3.Element == (Sequence1.Element, Sequence2.Element)> Sequence3
+```
+
+Named Opaque Result Typeは、Opaque Result Typeが使える場所では全て使えるようになるため、変数の型などにも利用可能。
+
+```swift
+let x: <T> T = 1
+for _: <T> Int in [1, 2, 3] { }
+```
+
+関連スレッド:  
+https://forums.swift.org/t/future-work-on-opaque-result-types/50999
+
+
+関連PR:  
+
+- [Structural opaque result types](https://github.com/apple/swift/pull/40710)
+- [Named opaque result types](https://github.com/apple/swift/pull/40715)
+- [Rework the relationship between generic environments and opaque archetypes](https://github.com/apple/swift/pull/40747)
+
 ### 将来的な話
 
 この拡張は汎用的なリバースジェネリックに向けたステップアップ。
@@ -372,10 +493,6 @@ func makeCollection(with number: some Numeric) -> some Collection {
   return [number]
 }
 ```
-
-関連スレッド:  
-- https://forums.swift.org/t/discussion-easing-the-learning-curve-for-introducing-generic-parameters/
-
 
 ```swift
 func concatenate<T>(a: some Collection<.Element == T>, b: some Collection<.Element == T>) -> some Collection<.Element == T>
@@ -390,11 +507,12 @@ func concatenate<T>(a: some Collection<T>, b: some Collection<T>) -> some Collec
 関連スレッド:  
 
 - https://forums.swift.org/t/pitch-light-weight-same-type-constraint-syntax/52889
+- https://forums.swift.org/t/discussion-easing-the-learning-curve-for-introducing-generic-parameters/
 
+関連PR:  
 
-Opaque Result Typesについて残りのタスクについての記載もある  
-
-関連スレッド: https://forums.swift.org/t/future-work-on-opaque-result-types/50999
+- [Parametrized protocol types](https://github.com/apple/swift/pull/40714)
+- [Opaque parameters](https://github.com/apple/swift/pull/40993)
 
 ## 参考リンク
 
@@ -414,7 +532,17 @@ Opaque Result Typesについて残りのタスクについての記載もある
 ### 関連PR
 
 - [Structural opaque result types](https://github.com/apple/swift/pull/40710)
+- [Named opaque result types](https://github.com/apple/swift/pull/40715)
+- [Rework the relationship between generic environments and opaque archetypes](https://github.com/apple/swift/pull/40747)
+- [Parametrized protocol types](https://github.com/apple/swift/pull/40714)
+- [Opaque parameters](https://github.com/apple/swift/pull/40993)
+
 
 ### その他
 
 - [LanguageGuide Opaque Types](https://docs.swift.org/swift-book/LanguageGuide/OpaqueTypes.html)
+
+※ テストファイル
+
+- [opaque_return_structural.swift](https://github.com/apple/swift/blob/main/test/type/opaque_return_structural.swift)
+- [opaque.swift](https://github.com/apple/swift/blob/main/test/type/opaque.swift)
