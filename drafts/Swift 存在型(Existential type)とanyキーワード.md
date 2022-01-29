@@ -87,7 +87,7 @@ func callee() -> Numeric {
 }
 
 func caller() {
-    let x = callee() + callee() // Binary operator '+' cannot be applied to two 'Numeric' operands
+    let x = callee() + callee() // ❌ Binary operator '+' cannot be applied to two 'Numeric' operands
 }
 ```
 
