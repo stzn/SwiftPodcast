@@ -340,12 +340,16 @@ self.someProp = try container.decode(_.self, forKey: .someProp)
 
 これは実際に利用された後でメリットがあるかないかを見て検討する。
 
+関連スレッド:
+https://forums.swift.org/t/reconsidering-the-top-level-restriction-on-placeholder-types/53280
+
 ## 参考リンク
 
 ### Forums
 
 - [SE-0315: Placeholder types](https://forums.swift.org/t/se-0315-placeholder-types/49801)
 - [[Accepted] SE-0315: Placeholder types](https://forums.swift.org/t/accepted-se-0315-placeholder-types/50671)
+- [Reconsidering the ‘Top-Level’ Restriction on Placeholder Types](https://forums.swift.org/t/reconsidering-the-top-level-restriction-on-placeholder-types/53280)
 
 ### プロポーザルドキュメント
 
