@@ -13,6 +13,7 @@
       - [Library Evolution観点でのメリット](#library-evolution観点でのメリット)
       - [型消去ラッパ観点でのメリット](#型消去ラッパ観点でのメリット)
     - [いつ導入される？](#いつ導入される)
+      - [2022/2/2 追記](#202222-追記)
     - [将来的な話](#将来的な話)
       - [Standard Libraryの`AnyHashable`と`AnyCollection`などの実装を簡単にする](#standard-libraryのanyhashableとanycollectionなどの実装を簡単にする)
       - [存在型の「強調」を抑える](#存在型の強調を抑える)
@@ -23,6 +24,7 @@
   - [参考リンク](#参考リンク)
     - [Forums](#forums)
     - [プロポーザルドキュメント](#プロポーザルドキュメント)
+    - [関連PR](#関連pr)
 
 ## 概要
 
@@ -157,7 +159,7 @@ func test(_ c: Copyable) {
 }
 ```
 
-これを共変位置の関連型にも拡張する。
+この共変型消去を関連型にも拡張する。
 
 ```swift
 func test(_ collection: RandomAccessCollection) {
@@ -170,9 +172,9 @@ func test(_ collection: RandomAccessCollection) {
 
 ただし、下記はできない。
 
-基となるプロトコルのコンテキストから見た時に、メンバへのアクセサの型に共変以外の位置の`Self`や`Self`をルートに持つ関連型の参照がある場合
+基となるプロトコルのコンテキストから見た時に、メンバへのアクセサの型に**共変以外の位置**の`Self`や`Self`をルートに持つ関連型の参照がある場合
 
-※ これらは共変と見なされる
+※ 下記の型は共変と見なされる
 
 - 戻り値の型の中の関数型
 - いずれかの要素型の中のタプル型
@@ -350,7 +352,32 @@ https://github.com/apple/swift/blob/main/docs/GenericsManifesto.md#generalized-e
 
 ### いつ導入される？
 
-2021/05時点でdeAcceptedになったが、実装が完了したという報告はまだない。masterリポジトリなどでは一部使用可能になっているので近々完了するかもしれない。(随時更新)
+2021/05時点でAcceptedになったが、実装が完了したという報告はまだない。mainリポジトリなどでは一部使用可能になっているので近々完了するかもしれない。(随時更新)
+
+#### 2022/2/2 追記
+
+Swift 5.6ではこの機能はDisabledに。使用するには`-Xfrontend -enable-experimental-universal-existentials`が必要。  
+関連PR: https://github.com/apple/swift/pull/41131
+
+下記のようなケースでSelfや関連型が利用できない(mainリポジトリでは実装済で利用可能)  
+関連PR: https://github.com/apple/swift/pull/39492
+
+```swift
+protocol P {
+  associatedtype A: P
+  func method1() -> A
+  func method2(_: A) 
+}
+protocol PBool: P where A == Bool {}
+
+func test(p: P, pBool: PBool) {
+  // p.method1の型は () -> P
+  let _: P = p.method1() // ❌ Member 'method1' cannot be used on value of protocol type 'P'; use a generic constraint instead
+
+  // pBool.method2の型は (Bool) -> Void
+  pBool.method2(true) // ❌ Member 'method2' cannot be used on value of protocol type 'PBool'; use a generic constraint instead
+}
+```
 
 ### 将来的な話
 
@@ -393,3 +420,8 @@ let collection: any Collection<Self.Element == Int> = [1, 2, 3].
 ### プロポーザルドキュメント
 
 - [Unlock existential for all protocols](https://github.com/apple/swift-evolution/blob/main/proposals/0309-unlock-existential-types-for-all-protocols.md)
+
+### 関連PR
+
+- [[5.6][SE-0309] Disable SE-0309 in Swift 5.6](https://github.com/apple/swift/pull/41131)
+- [SE-309: Covariant erasure for dependent member types](https://github.com/apple/swift/pull/39492)
