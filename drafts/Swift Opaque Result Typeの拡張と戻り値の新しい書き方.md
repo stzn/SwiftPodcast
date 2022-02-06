@@ -34,7 +34,7 @@
 
 ## 概要
 
-Swift5.1で導入されたOpaque Result Typeが構造的位置(structural position)でも使えるようになった。
+Swift5.1で導入されたOpaque Result Typeが、Swift5.7から構造的位置(structural position)でも使えるようになる。
 
 ## 用語
 
