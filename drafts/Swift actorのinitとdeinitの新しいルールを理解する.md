@@ -1,6 +1,6 @@
-# Swift actorの初期化/非初期化のルールとなぜを理解する
+# Swift actorのinitとdeinitの新しいルールを理解する
 
-- [Swift actorの初期化/非初期化のルールとなぜを理解する](#swift-actorの初期化非初期化のルールとなぜを理解する)
+- [Swift actorのinitとdeinitの新しいルールを理解する](#swift-actorのinitとdeinitの新しいルールを理解する)
   - [用語](#用語)
   - [概要](#概要)
   - [内容](#内容)
@@ -24,7 +24,6 @@
         - [シンタックス](#シンタックス)
         - [Isolation](#isolation)
       - [Sendability](#sendability)
-        - [委譲とSendable](#委譲とsendable)
       - [デイニシャライザ](#デイニシャライザ)
       - [global-actor分離とactorインスタンスメンバ](#global-actor分離とactorインスタンスメンバ)
         - [冗長な分離の削除](#冗長な分離の削除)
@@ -33,6 +32,7 @@
         - [selfが完全に初期化された後はnonisolationにする](#selfが完全に初期化された後はnonisolationにする)
         - [nonisolated selfのイニシャライザ内のプロパティへのアクセスにawaitをつける](#nonisolated-selfのイニシャライザ内のプロパティへのアクセスにawaitをつける)
         - [actorのasyncデイニシャライザ](#actorのasyncデイニシャライザ)
+        - [委譲イニシャライザのみ`Sendable`引数を必須にする](#委譲イニシャライザのみsendable引数を必須にする)
   - [参考リンク](#参考リンク)
     - [Forums](#forums)
     - [プロポーザルドキュメント](#プロポーザルドキュメント)
@@ -49,7 +49,7 @@
 
 ## 概要
 
-Swift5.5で導入されたactorに分離された状態の生成や衰退の過程には、いくつかの微妙なな側面を見逃していた。この提案では、actorの定義を強化して、actorに分離された状態がいつ開始/終了するかや`init`/`deinit`でできることを明確にする。
+Swift5.5で導入されたactorに分離された状態の生成や衰退の過程には、いくつかの微妙なな側面を見逃していた。この提案では、actorの定義を強化して、actorに分離された状態がいつ開始/終了するかや`init`/`deinit`でできることを明確にする。Swift5.6で導入予定。
 
 ## 内容
 
@@ -95,7 +95,7 @@ Task.detached { print(counter.increment()) } // データ競合しない
 
 ### global-actorとは？
 
-グローバルな状態を一つのactorとして分離するactor。複数の異なる型やメソッドなどに適用でき、安全にglobal-actorのエグゼキュータ内で安全に同時並行に扱うことがある。
+グローバルな状態を一つのactorの内部状態として分離するためのactor。プロセスに一つのインスタンスしか存在しない。複数の異なる型やメソッドなどに適用でき、安全にglobal-actorのエグゼキュータ内でデータ競合を起こさずに安全に同時並行処理で扱うことができる。
 
 ### Sendableとは？
 
@@ -239,7 +239,7 @@ class Process {
     @MainActor var status: Int = getStatus()
     @PIDActor var pid: ProcessID = genPID()
 
-    init() {} // 問題:このinit内は何で分離されている？
+    init() {} // 問題:このinit内はどのactorで分離されている？
 }
 ```
 
@@ -563,71 +563,93 @@ actorは継承がないため、`class`の複雑さを減らすことができ�
 
 #### Sendability
 
-actorの委譲イニシャライザとGAITの全てのイニシャライザは、他の関数と同じSendable引数に関するルールに従う。つまり、関数が分離された状態の場合、actorをまたがった呼び出しの場合、引数は`Sendable`プロトコルへの準拠が必須になる。
-
-actorの非委譲イニシャライザでは、`self`にFlow-sensitive分離が適用されているかどうかに関わらず、`Sendable`という観点では分離された状態だとみなされる。なぜならこれらのイニシャライザがインスタンス立ち上げの際にactorの格納プロパティにアクセスできるからである。
-
-この二つのルールによって、プログラマは新しいactorインスタンスを生成する際に、安全に`Sendable`の値を扱うことができる。基本的に、プログラマはactorのnon-Sendableな格納プロパティを初期化する場合は二つの選択肢しかない。
+actorの外側からactorのイニシャライザに値を渡す時、この値は`Sendable`でなければならない。
+そのため、新しいインスタンスを初期化している中で、Sendabilityという観点でのactorの「境界」は、イニシャライザのうちの一つへの最初の呼び出しから始まる。
+このルールによって、プログラマは新しいactorインスタンスを生成する際に、正しく`Sendable`の値を扱うように強制する。基本的に、プログラマはactorのnon-Sendableな格納プロパティを初期化する場合は二つの選択肢しかない。
 
 ```swift
 class NotSendableType { /* ... */ }
 `struct` Piece: Sendable { /* ... */ }
 
 actor Greg {
-    var ns: NonSendableType
+    var ns: NotSendableType
 
-    // 選択肢1: 非委譲イニシャライザはSendableな値しか受け取れず
-    // それを使って新しいnon-Sendableな値を構築する
+    // 選択肢1: 引数がSendableなためどこからでも呼び出せるイニシャライザ
     init(fromPieces ps: (Piece, Piece)) {
-        self.ns = NonSendableType(ps)
+        self.ns = NotSendableType(ps)
     }
 
-    // 選択肢2: nonisolated selfな委譲イニシャライザはnon-Sendableを受け取ることができ
-    // Sendableな部分を非委譲イニシャライザに渡すことができる
-    init(with ns: NonSendableType) {
+    // 選択肢2: 引数がnon-Sendableなため、他のイニシャライザへ委譲することしかできないイニシャライザ
+    init(with ns: NotSendableType) {
         self.init(fromPieces: ns.getPieces())
     }
 }
 ```
 
-上記で示したようにnon-Sendableな格納プロパティを持つactorを構築することができる。しかし、そのデータの`Sendable`な部分から新しいインスタンスを生成することができなければならない。上記の二つの選択肢は、非委譲イニシャライザからその部分を直接受け取るか、non-Sendableな値を受け取った委譲イニシャライザに頼るという方法を提供する。
-
-こうすることで、非委譲イニシャライザ内でnon-Sendableの完全に新しいインスタンスを構築することをプログラマに強制することができる。
-
-##### 委譲とSendable
-
-全ての委譲イニシャライザが任意の呼び出しでnon-Sendableの値を受け取れる訳ではない。non-Sendableを委譲イニシャライザに安全に渡せるかどうかは呼び出し側の分離状態次第になる。
-
-例えば、`async`委譲イニシャライザは`isolated self`である。そのため、委譲後にも格納プロパティにアクセスできる。もしnon-Sendableな値を呼び出し側の分離状態を考慮せずに使えるようにしてしまった場合、non-Sendableの不正な共有が起きる可能性がある。
+上記で示したようにnon-Sendableな格納プロパティを持つactorを構築することが**できる**。しかし、そのデータをactorのインスタンスに格納するためには、`Sendable`な部分から新しいインスタンスを生成するべき。actorのイニシャライザ内に入ると、他のイニシャライザに委譲する時や他のメソッドを呼び出す時など、non-Sendableな値は自由に渡すことができる。
 
 ```swift
 class NotSendableType { /* ... */ }
 `struct` Piece: Sendable { /* ... */ }
 
 actor Gene {
-    var ns: NonSendableType?
+    var ns: NotSendableType
 
-    init(with ns: NonSendableType) async {
-        self.init()
+    init(_ ns: NotSendableType) {
         self.ns = ns
     }
 
-    init(fromPieces ps: (Piece, Piece)) async {
-        let ns = NonSendableType(ps)
-        await self.init(with: ns) // ✅ OK
-        assert(self.ns == ns)
+    init(with ns: NotSendableType) async {
+        self.init(ns) // ✅ 他のイニシャライザへの委譲する際にnon-Sendableを渡すのはOK
+        someMethod(ns)  // ✅ イニシャライザからメソッドの呼び出し時もOK
     }
+
+    init(fromPieces ps: (Piece, Piece)) async {
+        let ns = NotSendableType(ps)
+        await self.init(with: ns) // ✅ 他のイニシャライザへの委譲する際にnon-Sendableを渡すのはOK
+    }
+
+    func someMethod(_: NotSendableType) { /* ... */ }
 }
 
-func someFunc(ns: NonSendableType) async {
-    let ns = NonSendableType()
+func someFunc() async {
+    let ns = NotSendableType()
+    _ = Gene(ns) // ❌ non-Sendableな値はactorの境界をまたがって渡せない
     _ = await Gene(with: ns) // ❌ non-Sendableな値はactorをまたがって渡せない
+    _ = await Gene(fromPieces: ns.getPieces()) // ✅ (Piece, Piece) はSendableなのでOK
 
-    _ = await Gene(fromPieces: ns.getPieces())
+    _ = await SomeGAIT(isolated: ns) // ❌ non-Sendableな値はactorの境界をまたがって渡せない
+    _ = await SomeGAIT(secondNonIso: ns)  // ❌ non-Sendableな値はactorの境界をまたがって渡せない
 }
 ```
 
-`Gene.init(with:)`と`Gene.init(fromPieces:)`はどちらも`isolated self`の委譲イニシャライザである。違いは`init(with:)`はnon-Sendableの引数を受け取っていて、`init(fromPieces:)`はSendableな引数のみを受け取れる。`someFunc`から`init(with:)`を呼び出すことはactorをまたがることになるため安全ではない。一方で`init(fromPieces:)`から`init(with:)`を呼び出すことは、同じ分離コンテキスト内なので安全である。
+GAITの場合、nonisolatedのイニシャライザは同じルールが適用される。つまり、そのようなイニシャライザに外部から入る際は、渡される値は`Sendable`でなければならない。globalではないactorとの違いは:
+
+1. 最初のイニシャライザの呼び出し先が既に同じglobal-actorに分離されている場合、`Sendable`に縛る必要はない(いつも通り)
+2. `nonisolated`のイニシャライザからglobal-actorに分離されたイニシャライザに委譲された場合は、`Sendable`でなければならない
+
+2番目の違いは`nonisolated`かつ`async`のイニシャライザからGAITに分離されたイニシャライザに委譲された場合にのみ適用される。
+
+```swift
+@MainActor
+class SomeGAIT {
+	var ns: NotSendableType
+
+	init(isolated ns: NotSendableType) {
+		self.ns = ns
+	}
+
+	nonisolated init(firstNonIso ns: NotSendableType) async {
+		await self.init(isolated: ns) // ❌ non-Sendableな値はactorの境界をまたがって渡せない
+	}
+
+	nonisolated init(secondNonIso ns: NotSendableType) async {
+		await self.init(firstNonIso: ns)  // ✅
+	}
+}
+```
+
+上記の例の障壁は、`nonisolated`属性を削除することでイニシャライザの分離コンテキストが一致する(同じGAITに分離されている)ため解決する。
 
 #### デイニシャライザ
 
@@ -643,7 +665,7 @@ Swift5.5では、actorとGAITは`deinit`の中で二つの異なる種類のデ�
 actor A {
     let immutableSendable = SendableType()
     var mutableSendable = SendableType()
-    let nonSendable = NonSendableType()
+    let nonSendable = NotSendableType()
 
     init() {
         _ = self.immutableSendable  // ✅ ok
@@ -692,8 +714,24 @@ var y = x + 2
 
 ##### 冗長な分離の削除
 
-global-actorに分離されている格納プロパティは、その値を保持している型のインスタンスのストレージへの安全な同時並行アクセスを提供している。例えば`pid`はactorに分離された格納プロパティの場合、`p.pid.reset()`は`p`から`pid`を読み取る時のみメモリは守られていて、その後の`reset()`は安全に呼ばれない。そのため`struct`や`enum`といった値型では、global-actorに分離された格納プロパティは意味をなさない。値型の格納プロパティのストレージの変更はCOW(Copy on write)のお陰でデフォルトで安全に行える。
-そこで、値型のプロパティに設定されているglobal-actor分離(アノテーション)の要件を削除する。つまり、これらの格納プロパティの読み書きに`await`は必要なくなる。
+global-actorに分離されている格納プロパティは、その値を保持している型のインスタンスのストレージへの安全な同時並行アクセスを提供している。例えば`pid`はactorに分離された格納プロパティの場合、`p.pid.reset()`は`p`から`pid`を読み取る時のメモリアクセスのみ守られ、その後ろの`reset()`は守られない。そのため値型(`struct`や`enum`など)では、global-actorに分離された格納プロパティは意味をなさない。値型の中の格納プロパティのストレージの変更は、タスク間でシェアされることがないため、デフォルトで同時並行処理間で安全に扱える。例えば、`Sendable`クロージャ内で可変変数をキャプチャすることはできない:
+
+```swift
+@MainActor
+struct StatTracker {
+	var count = 0
+
+	mutating func update() {
+		count += 1
+	}
+}
+
+var st = StatTracker()
+Task { await st.update() } // ❌ error: mutation of captured var 'st' in concurrently-executing code
+```
+
+結局、そのstruct内部の格納プロパティがglobal-actorに守られているかどうかに関わらず、structのメモリを同時並行に変更する手段はない。そのインスタンスが共有されるかどうかは、`var`に紐づいているかどうか次第で、許されている共有の種類はコピーを通してだけである。そのstruct内部の参照型の変更は、その参照型自身に適用されているactorに分離が必須になる。言い換えると、`class`型を含んだ格納プロパティにglobal-actorの分離を適用しても、その`class`のメンバへ同時並行にアクセスすることができてしまう。
+そこで、こういったプロパティにアクセスする際に、分離しなければならないという要件を削除する。つまり、これらへのアクセスに`await`は必要なくなる。
 
 [global actorのプロポーザル](https://github.com/apple/swift-evolution/blob/main/proposals/0316-global-actors.md#detailed-design)では、actorはglobal-actorの格納プロパティを保持できないと明記されているが、Swift5.5ではこれが強制されていない。これは強制されるべき(例えば、actorストレージはactorインスタンスに一貫して分離されるべき)。こうすると、スレッド間のfalse sharing(※)の可能性を減らすことができる。具体的には、常にactorインスタンスで使用しているメモリへの書き込みアクセスは一つのスレッドのみになる。
 
@@ -793,6 +831,14 @@ Flow-sensitive分離での`async`なプロパティへのアクセスをサポ�
 
 ここでの主なリスクは、Swift現在の実装では、`deinit`から`self`の参照をエスケープして`deinit`完了後も参照を保持した場合(もし`deinit`がasyncであるならばこれは可能でなければならない。)の挙動が不定であるということ。もう一つの選択肢は`deinit`内でブロッキングをすることだが、Swift Concurrencyはブロッキングを避けるように設計されている。
 
+##### 委譲イニシャライザのみ`Sendable`引数を必須にする
+
+イニシャライザを委譲することは、概念的に初期化中にactorに渡されたnon-`Sendable`な値を持つ新しいインスタンスを構築するのに良い場所である。これはnonisolatedな`self`の委譲イニシャライザからのみ任意のコンテキストからnon-`Sendable`の値を受け入れることができる、というこにしなければ機能しない。また、このイニシャライザの委譲状態を型のインターフェイスとして公開しなければならなくなる。例えば、`convenience`のようなアノテーションが必須になる。`convenience`の必要性を削除する方が、特定のケースの委譲イニシャライザにのみnon-`Sendable`な値を許すよりも選ばれた。これにはいくつかの理由がある:
+
+- `Sendable` とイニシャライザのルールが3つの要素(イニシャライザの委譲状態、selfの分離、呼び出し側のコンテキスト)に依存することになり複雑になる。通常の`Sendable`のルールは2つにのみ依存している
+- `convenience`をたった一つのユースケースのために必須とすることはあまり価値がない
+- ファクトリパターンを使用するstatic関数は、イニシャライザの必要性を任意のコードから呼び出し可能なnon-`Sendable`引数に置き換えることができる
+
 ## 参考リンク
 
 ### Forums
@@ -810,6 +856,7 @@ Flow-sensitive分離での`async`なプロパティへのアクセスをサポ�
 - [[SE-327] Implement Flow-sensitive actor isolation for actor inits](https://github.com/apple/swift/pull/40028)
 - [[SE-327] Remove redundant global-actor isolation](https://github.com/apple/swift/pull/40868)
 - [[SE-327] Reimplement: make initializing expressions for member stored properties nonisolated](https://github.com/apple/swift/pull/40908)
+- [[SE-327] Remove need for convenience for delegating initializers of an actor](https://github.com/apple/swift/pull/41083)
 
 ### その他
 
