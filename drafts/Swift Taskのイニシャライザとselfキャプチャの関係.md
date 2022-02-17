@@ -186,7 +186,7 @@ final class DetailViewController: UIViewController {
 
 ### Taskのイニシャライザはメモリリークを起こさない？
 
-`Task`の場合、本文は即時に実行されてescapeされることがないため、`self`の参照も本文内で完結するためメモリリークは起こらない。
+`Task`の場合、本文は即時に実行されてnon-escapingと見なされるため、`self`の参照も本文内で完結するためメモリリークは起こらない。
 
 https://github.com/apple/swift-evolution/blob/main/proposals/0304-structured-concurrency.md#implicit-self
 
