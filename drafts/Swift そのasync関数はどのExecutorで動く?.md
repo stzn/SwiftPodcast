@@ -12,6 +12,7 @@
       - [明示的なエグゼキュータの継承](#明示的なエグゼキュータの継承)
       - [エグゼキュータの切り替えの最適化](#エグゼキュータの切り替えの最適化)
       - [`Task`に分離された値と`actor`に分離された値を区別する](#taskに分離された値とactorに分離された値を区別する)
+    - [実装で問題があった？](#実装で問題があった)
   - [参考リンク](#参考リンク)
     - [Forums](#forums)
     - [プロポーザルドキュメント](#プロポーザルドキュメント)
@@ -173,6 +174,14 @@ func outside(argument: NonSendableValue) async {
 ある一つの`Task`、もしくは一つの`actor`からのアクセスのみに制限することで、non-`Sendable`な値の利用は完全に秩序のある状態にすることができる。現在の`Sendable`ルールではこの2つを区別していない。代わりに、関数内の全てのnon-`Sendable`な値は統一的な制約の対象となる。これにより、`actor`に分離された関数と同じ`Task`の他の関数の間に壁ができている。より表現力豊かな`Sendable`ルールがあれば`actor`に分離された`async`関数の中で、これらを区別することができる。これは、このプロポーザルが侵害する合理的な表現度の程度を大幅に減少させることができると考えられる。
 
 引数や戻り値のデフォルトは`actor`に分離されるよりも`Task`に分離されたものでおそらくあるべき。これを検討する場合は最適な結果を得るためにすぐに検討する必要がある。
+
+### 実装で問題があった？
+
+https://github.com/apple/swift/pull/41272
+
+- [Fix and generalize the printing of suppressible features](https://github.com/apple/swift/pull/41376)
+
+- [Fix and generalize the printing of suppressible features](https://github.com/apple/swift/pull/41399)
 
 ## 参考リンク
 
