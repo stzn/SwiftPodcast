@@ -154,7 +154,7 @@ https://github.com/apple/swift/blob/967a8b439f8dbd4580f652e378bb246e6eddb3c8/doc
 `class`などの参照型の中で、クロージャを使用し、その内部で`self`(=`class`のインスタンス)を参照すると強参照になる。これがいくつか問題になる場合がある。
 例えば、ある数字のリストをタップすると選んだ数字を表示するページに遷移するシンプルなアプリを作る。ボタンを押すとアラートを表示する。
 
-<img alt="画面の基本動作" src="../images/Swift%20Taskのイニシャライザとselfキャプチャの関係/basic_behavior.gif" width="160" height="284" />
+<img alt="画面の基本動作" src="../images/Swift%20Taskのイニシャライザとselfの関係/basic_behavior.gif" width="160" height="284" />
 
 #### メモリリーク
 
@@ -187,12 +187,18 @@ let viewController = DetailViewController(number: 1)
 
 ![retain](./../images/Swift%20Taskのイニシャライザとselfの関係/retain.png)
 
-これを解消するためには、キャプチャリストを使って`self`への参照を弱参照にする必要がある。
+これを解消するためには、キャプチャリストを使って`self`への参照を弱参照(または未所有参照)にする必要がある。
 
 ```swift
 // ↓↓↓↓↓↓↓↓↓強参照サイクルにはならない↓↓↓↓↓↓↓↓↓↓↓↓
 self.action = { [weak self] number in
     self?.number = number
+}
+
+// ↓↓↓↓↓↓↓↓↓強参照サイクルにはならない↓↓↓↓↓↓↓↓↓↓↓↓
+// selfが解放されている場合はcrashするので注意が必要
+self.action = { [unowned self] number in
+    self.number = number
 }
 ```
 
@@ -215,7 +221,7 @@ final class DetailViewController: UIViewController {
 
 こうするとアラートは表示されるだろうか？
 
-<img alt="期待していないアラート表示" src="../images/Swift%20Taskのイニシャライザとselfキャプチャの関係/unexpected_show_alert.gif" width="160" height="284" />
+<img alt="期待していないアラート表示" src="../images/Swift%20Taskのイニシャライザとselfの関係/unexpected_show_alert.gif" width="160" height="284" />
 
 画面を閉じてもアラートが表示される。クロージャ内で`self`を強参照して、このクロージャを抜けるまで`self`の参照が残っているため。
 
@@ -254,7 +260,7 @@ https://github.com/apple/swift-evolution/blob/main/proposals/0304-structured-con
 }
 ```
 
-<img alt="Task期待していないアラート表示" src="../images/Swift%20Taskのイニシャライザとselfキャプチャの関係/task_unexpected_show_alert.gif" width="160" height="284" />
+<img alt="Task期待していないアラート表示" src="../images/Swift%20Taskのイニシャライザとselfの関係/task_unexpected_show_alert.gif" width="160" height="284" />
 
 予想通り`self`はクロージャを抜けるまで強参照され、アラートが表示される。
 
@@ -271,7 +277,7 @@ https://github.com/apple/swift-evolution/blob/main/proposals/0304-structured-con
 }
 ```
 
-<img alt="TaskでSelfを弱参照しても期待していないアラート表示" src="../images/Swift%20Taskのイニシャライザとselfキャプチャの関係/task_with_weak_self_unexpected_show_alert.gif" width="160" height="284" />
+<img alt="TaskでSelfを弱参照しても期待していないアラート表示" src="../images/Swift%20Taskのイニシャライザとselfの関係/task_with_weak_self_unexpected_show_alert.gif" width="160" height="284" />
 
 この場合でもアラートが表示される。これはSwift Concurrencyがsuspendからresumeした際に必要な変数を内部で保持しているため、`self`の参照が存在し続けている。
 
