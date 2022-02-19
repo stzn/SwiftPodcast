@@ -3,7 +3,7 @@
 - [Swift actorのinitとdeinitの新しいルールを理解する](#swift-actorのinitとdeinitの新しいルールを理解する)
   - [用語](#用語)
     - [`actor`](#actor)
-    - [global-`actor`](#global-actor)
+    - [global-actor](#global-actor)
     - [Sendable](#sendable)
     - [その他](#その他)
   - [概要](#概要)
@@ -14,19 +14,20 @@
       - [deinitでデータ競合を起こすリスクがある](#deinitでデータ競合を起こすリスクがある)
       - [格納プロパティのデフォルト値を設定する式の`actor`分離](#格納プロパティのデフォルト値を設定する式のactor分離)
       - [イニシャライザの委譲](#イニシャライザの委譲)
+      - [(余談)そもそもなぜconvenienceキーワードが必要なのか？](#余談そもそもなぜconvenienceキーワードが必要なのか)
     - [解決策](#解決策)
       - [非委譲イニシャライザの場合](#非委譲イニシャライザの場合)
         - [Flow-sensitiveな`actor`の分離(GAITを除く`actor`の非委譲イニシャライザ)](#flow-sensitiveなactorの分離gaitを除くactorの非委譲イニシャライザ)
           - [`isolated self`のイニシャライザ](#isolated-selfのイニシャライザ)
           - [nonisolated selfのイニシャライザ](#nonisolated-selfのイニシャライザ)
-        - [GAITs(global-`actor`に分離された型)](#gaitsglobal-actorに分離された型)
+        - [GAITs(global-actorに分離された型)](#gaitsglobal-actorに分離された型)
         - [`actor`イニシャライザのルールを簡単にまとめると](#actorイニシャライザのルールを簡単にまとめると)
       - [委譲イニシャライザ](#委譲イニシャライザ)
         - [シンタックス](#シンタックス)
         - [Isolation](#isolation)
       - [Sendability](#sendability)
       - [デイニシャライザ](#デイニシャライザ)
-      - [global-`actor`分離と`actor`インスタンスメンバ](#global-actor分離とactorインスタンスメンバ)
+      - [global-actor分離とactorインスタンスメンバ](#global-actor分離とactorインスタンスメンバ)
         - [余分な分離の削除](#余分な分離の削除)
       - [Swift5.5からのsource breaking](#swift55からのsource-breaking)
       - [検討したが却下になった考え](#検討したが却下になった考え)
@@ -82,9 +83,9 @@ Task.detached { print(counter.increment()) } // データ競合しない
 
 似ているものに「競合状態」がある。これは、各スレッドの処理の実行順序が不定で、同じ入力しても出力結果が変わってしまう状態を指す。`actor`はデータ競合を防ぐが、設計次第で競合状態を起こす可能性はある。
 
-### global-`actor`
+### global-actor
 
-グローバルな状態を一つの`actor`の内部状態として分離するための`actor`。プロセスに一つのインスタンスしか存在しない。複数の異なる型やメソッドなどに適用でき、安全にglobal-`actor`のエグゼキュータ内でデータ競合を起こさずに安全に同時並行処理で扱うことができる。
+グローバルな状態を一つの`actor`の内部状態として分離するための`actor`。プロセスに一つのインスタンスしか存在しない。複数の異なる型やメソッドなどに適用でき、安全にglobal-actorのエグゼキュータ内でデータ競合を起こさずに安全に同時並行処理で扱うことができる。
 
 ### Sendable
 
@@ -97,7 +98,7 @@ Task.detached { print(counter.increment()) } // データ競合しない
 - 中断点: 中断されるポイント
 - エグゼキュータ(executor): async関数を実行するオブジェクト。`actor`は内部に一度に一つの処理を実行するシリアルエグゼキュータを持つ
 - ホップ: ある`actor`のエグゼキュータに移動する(飛ぶ)こと。こうすることで`actor`に分離されている処理はこのエグゼキュータで実行される
-- GAIT: Global-`actor` isolated typesの略。global-`actor`に分離された型。例:@MainActorの付いたクラスなど
+- GAIT: Global-`actor` isolated typesの略。global-actorに分離された型。例:@MainActorの付いたクラスなど
 
 ## 概要
 
@@ -229,9 +230,9 @@ func example() async {
 
 #### 格納プロパティのデフォルト値を設定する式の`actor`分離
 
-現在は、`class`、`struct`、`enum`ではglobal-`actor`に分離されたプロパティを保持できる。プログラマがデフォルト値を設定する式を指定している場合、その値はそれぞれの型の`non-async`非委譲イニシャライザの中で計算される。
+現在は、`class`、`struct`、`enum`ではglobal-actorに分離されたプロパティを保持できる。プログラマがデフォルト値を設定する式を指定している場合、その値はそれぞれの型の`non-async`非委譲イニシャライザの中で計算される。
 
-問題なのは、それらがそれぞれのglobal-`actor`のエグゼキュータ上で実行されるため、不可能な制約が生成できてしまう。
+問題なのは、それらがそれぞれのglobal-actorのエグゼキュータ上で実行されるため、不可能な制約が生成できてしまう。
 
 ```swift
 
@@ -246,7 +247,7 @@ class Process {
 }
 ```
 
-この例はSwift5.5でエラーにならないが、`status`と`pid`が別のglobal-`actor`に分離されているため、`non-async`なイニシャライザ内で一つの`actor`に分離できない。また、`non-async`なので、適切な`actor`にホップすることもできず、結局、`getStatus`も`getPID`も適切なエグゼキュータで実行できない状態になっている。
+この例はSwift5.5でエラーにならないが、`status`と`pid`が別のglobal-actorに分離されているため、`non-async`なイニシャライザ内で一つの`actor`に分離できない。また、`non-async`なので、適切な`actor`にホップすることもできず、結局、`getStatus`も`getPID`も適切なエグゼキュータで実行できない状態になっている。
 
 #### イニシャライザの委譲
 
@@ -269,6 +270,17 @@ Swiftでは全てのnominal型(`class`や``struct``などの名前のある型)�
 `actor`は継承をサポートしておらず、`convenience`修飾子をつけるかどうかも明記していなかったが、Swift5.5では委譲する際に
 `convenience`修飾子が必須になっている。
 
+#### (余談)そもそもなぜconvenienceキーワードが必要なのか？
+
+- SwiftのクラスはイニシャライザをBaseクラスから継承する(Objective-C由来)
+- Swiftはより型に厳密で暗黙的なNullabilityを許容しないため、全てのプロパティに初期値がある(もくしはOptionalにする)場合のみ、この継承は発生する
+- 他のイニシャライザの継承を持つ言語と異なり、Swiftはイニシャライザのサブセットが、自身で実装したものであっても自動で継承させることができる
+- これを任意のサブクラスに対しても安全にするには、継承されたイニシャライザは、サブクラスであっても、クラスのすべてのプロパティを初期化するために別のイニシャライザに委譲する必要がある
+- ただし、サブクラスはスーパークラスのイニシャライザの中身を知ることはできないため、他のクラスが呼び出すdesignatedイニシャライザなのか、designatedイニシャライザの1つを呼び出すconvenienceイニシャライザなのかを知ることはできない
+- そのためconvenienceイニシャライザには特別なマーク(`convanience`キーワード)を設定する(これらは他のイニシャライザ初期化子を自分で提供した場合に継承できるもの)。`final`なクラスはこの要件がない
+
+- [Why does Swift need the `convenience` keyword?](https://forums.swift.org/t/why-does-swift-need-the-convenience-keyword/55428/2)
+
 ### 解決策
 
 #### 非委譲イニシャライザの場合
@@ -289,7 +301,7 @@ Swift5.5では、「escapingする`self`の使用制限」(escaping-use restrict
 
 1. `nonisolated self`参照を保持するイニシャライザ
    - `non-async`イニシャライザ
-   - global-`actor`に分離されたイニシャライザ
+   - global-actorに分離されたイニシャライザ
    - `nonisolated`キーワードを持つイニシャライザ
 
 2. `isolated self`参照を保持するイニシャライザ
@@ -368,7 +380,7 @@ Swift5.5では、「escapingする`self`の使用制限」(escaping-use restrict
 
 ###### nonisolated selfのイニシャライザ
 
-このカテゴリには`non-async`イニシャライザや`self`とは異なったコンテキスト(global-`actor`)に分離したイニシャライザを含んでいる。`actor`のメソッドと異なり、同期する必要のある`actor`インスタンスは存在しないため、`actor`の`non-async`イニシャライザに`await`は必要ない。さらに、もし安全ならば、同期なしで格納プロパティにアクセスすることができる。
+このカテゴリには`non-async`イニシャライザや`self`とは異なったコンテキスト(global-actor)に分離したイニシャライザを含んでいる。`actor`のメソッドと異なり、同期する必要のある`actor`インスタンスは存在しないため、`actor`の`non-async`イニシャライザに`await`は必要ない。さらに、もし安全ならば、同期なしで格納プロパティにアクセスすることができる。
 
 ただし、格納プロパティにアクセスするには`actor`のインスタンスをまず立ち上げる(初期化を完了させる)必要がある。これは`self`への参照のアクセスが排他的であるということに依存しており、より弱い形式の分離であると見なされる。もし`self`がイニシャライザをescapeして使用される場合、このユニークさを保証するためには時間コストのかかる分析をしなければならない。そこで、直接格納プロパティへアクセスする以外に`self`を使っている期間は`self`に`nonisolated`な状態に変化(衰退)する。(Flow-Sensitive `actor`分離(※))。これは特定の制御フローで一度起きたらイニシャライザの最後まで保たれる。
 
@@ -458,7 +470,7 @@ init(hasALoop: Void) {
 
 **他の例**
 
-`non-async`イニシャライザ以外にも、global-`actor`に分離されていたり、`nonisolated`の付いたイニシャライザも`nonisolated self`を持つ可能性がある。
+`non-async`イニシャライザ以外にも、global-actorに分離されていたり、`nonisolated`の付いたイニシャライザも`nonisolated self`を持つ可能性がある。
 
 下記の例を考えてみる。
 
@@ -496,7 +508,7 @@ func printStatus(_ s: Status) { /* ... */}
 
 `await`できる場合、`nonisolated self`を持つイニシャライザから`self`に分離されたメソッドの呼び出しが許可されていることに注目。この呼び出しは、`nonisolated self`の使用とみなされ、格納プロパティへのアクセス以外で最初の`self`へのアクセスになる。その後は、`non-async`イニシャライザと同じように`init`内での格納プロパティへのアクセスはできなくなる。このイニシャライザは`async`なので技術的には`Sendable`な`self.valid`の値を`await`できるが、この状況でのアクセスを禁止することを選んだ。(詳細は[nonisolated selfのイニシャライザ内のプロパティへのアクセスにawaitをつける](#nonisolated-selfのイニシャライザ内のプロパティへのアクセスにawaitをつける)を参照)
 
-##### GAITs(global-`actor`に分離された型)
+##### GAITs(global-actorに分離された型)
 
 GAITの`nonisolated`イニシャライザは、`non-async`イニシャライザと同じ状況で、エグゼキュータの保護なしにインスタンスを立ち上げなければならない。つまり、データ競合を生み出す可能性がある。
 
@@ -545,7 +557,7 @@ class ProtectedByExecutor<T: Equatable> {
 
 - `async`イニシャライザは`actor`に分離されている。全ての格納プロパティを初期化した時点で`actor`のエグゼキュータにホップして`await`なしで安全に格納プロパティにアクセスできる
 - `non-async`イニシャライザは`actor`に分離されていない。全ての格納プロパティを初期化後、格納プロパティへアクセスできるが、一度格納プロパティ以外で`self`にアクセスした場合、イニシャライザ内のそれ以降では、`self`に`nonisolated`な状態になるため、可変な格納プロパティや`let`でもNonSendableな格納プロパティにアクセスできない
-- `actor`型のglobal-`actor`に分離されたイニシャライザや`nonisolated`の`async`イニシャライザなどの例外ケースでは、`non-async`イニシャライザと同じカテゴリになる
+- `actor`型のglobal-actorに分離されたイニシャライザや`nonisolated`の`async`イニシャライザなどの例外ケースでは、`non-async`イニシャライザと同じカテゴリになる
 
 [テストコード](https://github.com/apple/swift/blob/main/test/Concurrency/flow_isolation.swift)
 を見るとわかりやすいかもしれない。
@@ -633,8 +645,8 @@ func someFunc() async {
 
 GAITの場合、nonisolatedのイニシャライザは同じルールが適用される。つまり、そのようなイニシャライザに外部から入る際は、渡される値は`Sendable`でなければならない。globalではない`actor`との違いは:
 
-1. 最初のイニシャライザの呼び出し先が既に同じglobal-`actor`に分離されている場合、`Sendable`に縛る必要はない(いつも通り)
-2. `nonisolated`のイニシャライザからglobal-`actor`に分離されたイニシャライザに委譲された場合は、`Sendable`でなければならない
+1. 最初のイニシャライザの呼び出し先が既に同じglobal-actorに分離されている場合、`Sendable`に縛る必要はない(いつも通り)
+2. `nonisolated`のイニシャライザからglobal-actorに分離されたイニシャライザに委譲された場合は、`Sendable`でなければならない
 
 2番目の違いは`nonisolated`かつ`async`のイニシャライザからGAITに分離されたイニシャライザに委譲された場合にのみ適用される。
 
@@ -704,9 +716,9 @@ Swift5.5では、`actor`とGAITは`deinit`の中で二つの異なる種類の�
 
 `init`と`deinit`の違いは、`deinit`は`Sendable`プロパティにしかアクセスできないが、`init`は`nonisolated self`に衰退する前はnon-Sendableプロパティへアクセスできる。
 
-#### global-`actor`分離と`actor`インスタンスメンバ
+#### global-actor分離とactorインスタンスメンバ
 
-格納プロパティの型がglobal-`actor`に分離されている場合の主な問題は、そのデフォルト値を設定する式もそのglobal-`actor`に分離されているという点。プロパティはそれぞれのglobal-`actor`に分離されているため、複数の`actor`の分離が発生し、不可能な`actor`分離の要件が生まれてしまう。`non-async`非委譲イニシャライザに必要な分離状態は、デフォルト値を持つ格納プロパティに適用されるすべての分離を統一しなければならない。なぜならば`non-async`イニシャライザはホップできず、関数は二つのglobal `actor`に分離させることができないため。Swift5.5では、この不可能な要件が受け入れられている(正しくない)。
+格納プロパティの型がglobal-actorに分離されている場合の主な問題は、そのデフォルト値を設定する式もそのglobal-actorに分離されているという点。プロパティはそれぞれのglobal-actorに分離されているため、複数の`actor`の分離が発生し、不可能な`actor`分離の要件が生まれてしまう。`non-async`非委譲イニシャライザに必要な分離状態は、デフォルト値を持つ格納プロパティに適用されるすべての分離を統一しなければならない。なぜならば`non-async`イニシャライザはホップできず、関数は二つのglobal-actorに分離させることができないため。Swift5.5では、この不可能な要件が受け入れられている(正しくない)。
 
 これを解決するために、名前付(nominal)型メンバの格納プロパティのデフォルト値を設定する式の分離状態を削除する。その代わりにそれらは型システムから`nonisolated`とみなされる。それらのプロパティを初期化するため分離が必要な場合は、常に`init`を定義し、適切な分離状態を提供することができる。
 
@@ -720,7 +732,7 @@ var x = 20
 var y = x + 2
 ```
 
-※ Xcode 13.3 Beta2から、global-`actor`に分離された格納プロパティにデフォルト値を設定すると、Swift5ではワーニング、Swift6ではエラーになる。
+※ Xcode 13.3 Beta2から、global-actorに分離された格納プロパティにデフォルト値を設定すると、Swift5ではワーニング、Swift6ではエラーになる。
 
 ```swift
 class Party {
@@ -736,7 +748,7 @@ class Party {
 
 ##### 余分な分離の削除
 
-global-`actor`に分離されている格納プロパティは、型のインスタンスの格納プロパティが占有しているストレージへの安全な同時並行アクセスを提供している。例えば、問題点のところで例で出てきた`pid`など`actor`に分離された格納プロパティの場合、`p.pid.reset()`は`p`から`pid`を読み取る時のメモリアクセスのみ守られ、その後ろの`reset()`は守られない。そのため値型(`struct`や`enum`など)では、global-`actor`に分離された格納プロパティは意味をなさない。値型の中の格納プロパティのストレージの変更は、タスク間でシェアされることがないため、デフォルトで同時並行処理間で安全に扱える。例えば、`Sendable`クロージャ内で可変変数をキャプチャすることはできない:
+global-actorに分離されている格納プロパティは、型のインスタンスの格納プロパティが占有しているストレージへの安全な同時並行アクセスを提供している。例えば、問題点のところで例で出てきた`pid`など`actor`に分離された格納プロパティの場合、`p.pid.reset()`は`p`から`pid`を読み取る時のメモリアクセスのみ守られ、その後ろの`reset()`は守られない。そのため値型(`struct`や`enum`など)では、global-actorに分離された格納プロパティは意味をなさない。値型の中の格納プロパティのストレージの変更は、タスク間でシェアされることがないため、デフォルトで同時並行処理間で安全に扱える。例えば、`Sendable`クロージャ内で可変変数をキャプチャすることはできない:
 
 ```swift
 @MainActor
@@ -752,10 +764,10 @@ var st = StatTracker()
 Task { await st.update() } // ❌ error: mutation of captured var 'st' in concurrently-executing code
 ```
 
-結局、そのstruct内部の格納プロパティがglobal-`actor`に守られているかどうかに関わらず、structのメモリを同時並行に変更する手段はない。インスタンスが共有できるかどうかは`var`に紐づいているかどうか次第で、許されている共有の種類もコピーによるものだけである。そのstruct内部の参照型の変更は、その参照型自身に適用されている`actor`に分離が必須になる。言い換えると、`class`型を含んだ格納プロパティにglobal-`actor`の分離を適用しても、その`class`のメンバへ同時並行にアクセスすることができてしまう。
+結局、そのstruct内部の格納プロパティがglobal-actorに守られているかどうかに関わらず、structのメモリを同時並行に変更する手段はない。インスタンスが共有できるかどうかは`var`に紐づいているかどうか次第で、許されている共有の種類もコピーによるものだけである。そのstruct内部の参照型の変更は、その参照型自身に適用されている`actor`に分離が必須になる。言い換えると、`class`型を含んだ格納プロパティにglobal-actorの分離を適用しても、その`class`のメンバへ同時並行にアクセスすることができてしまう。
 そこで、こういったプロパティにアクセスする際に、分離しなければならないという要件を削除する。つまり、これらへのアクセスに`await`は必要なくなる。
 
-[global `actor`のプロポーザル](https://github.com/apple/swift-evolution/blob/main/proposals/0316-global-`actor`s.md#detailed-design)では、`actor`はglobal-`actor`の格納プロパティを保持できないと明記されているが、Swift5.5ではこれが強制されていない。これは強制されるべき(例えば、`actor`ストレージは`actor`インスタンスに一貫して分離されるべき)。こうすると、スレッド間のfalse sharing(※)の可能性を減らすことができる。具体的には、常に`actor`インスタンスで使用しているメモリへの書き込みアクセスは一つのスレッドのみになる。
+[global `actor`のプロポーザル](https://github.com/apple/swift-evolution/blob/main/proposals/0316-global-actors.md#detailed-design)では、`actor`はglobal-actorの格納プロパティを保持できないと明記されているが、Swift5.5ではこれが強制されていない。これは強制されるべき(例えば、`actor`ストレージは`actor`インスタンスに一貫して分離されるべき)。こうすると、スレッド間のfalse sharing(※)の可能性を減らすことができる。具体的には、常に`actor`インスタンスで使用しているメモリへの書き込みアクセスは一つのスレッドのみになる。
 
 ※ 共有していないデータをプロセッサのキャッシュ上の同一ラインで共有してしまう状況
 https://en.wikipedia.org/wiki/False_sharing
@@ -768,13 +780,13 @@ https://en.wikipedia.org/wiki/False_sharing
 
 - (警告の出されずに)Swift5.5で定義した`init`はより厳密なルール下にあるので変更の必要はない
 - `actor`イニシャライザの`convenience`修飾子は無視されるかfix-itが出力される
-- (値型の)通常の格納プロパティの余分なglobal-`actor`分離は無視されるかfix-itが出力される
+- (値型の)通常の格納プロパティの余分なglobal-actor分離は無視されるかfix-itが出力される
 
 source breakが起きる点
 
 - `actor`やGAITの`deinit`で使える機能が制限される [参考PR](https://github.com/apple/swift/pull/41305)
 - GAITの分離されていない一連の`init`では、データ競合を防ぐために使用できる機能が制限される
-- `actor`のglobal-`actor`に分離された格納プロパティは禁止される
+- `actor`のglobal-actorに分離された格納プロパティは禁止される
 - `actor`に分離された格納プロパティのメンバのデフォルト値は`nonisolated`とみなされる
 
 GAITの場合はSwiftで定義された`class`にのみ適用され、`MainActor`に分離されたObjective-Cからインポートされた`class`はデータ競合が起きないと想定されるため、適用されない。
@@ -876,7 +888,7 @@ Flow-sensitive分離での`async`なプロパティへのアクセスをサポ�
 ### 関連PR
 
 - [[SE-327] Implement Flow-sensitive `actor` isolation for `actor` inits](https://github.com/apple/swift/pull/40028)
-- [[SE-327] Remove redundant global-`actor` isolation](https://github.com/apple/swift/pull/40868)
+- [[SE-327] Remove redundant global-actor isolation](https://github.com/apple/swift/pull/40868)
 - [[SE-327] Reimplement: make initializing expressions for member stored properties nonisolated](https://github.com/apple/swift/pull/40908)
 - [[SE-327] Remove need for convenience for delegating initializers of an `actor`](https://github.com/apple/swift/pull/41083)
 
