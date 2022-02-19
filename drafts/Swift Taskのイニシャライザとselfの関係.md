@@ -14,8 +14,6 @@
     - [キャンセルして処理が行われないようにする](#キャンセルして処理が行われないようにする)
     - [無限ループでTaskのイニシャライザ内でもメモリリークが発生することがある](#無限ループでtaskのイニシャライザ内でもメモリリークが発生することがある)
   - [参考リンク](#参考リンク)
-    - [Forums](#forums)
-    - [その他](#その他)
 ## 概要
 
 Taskのイニシャライザの引数に渡すクロージャ内では、これまでのクロージャとは異なり、`class`などの参照型では`self`を明示的に記載する必要がない。Taskのイニシャライザはどういう仕組みになっているのか、また使用する際に気をつけるべきなどを改めて考えてみる。
@@ -31,7 +29,7 @@ Taskの優先順位を決める`priority`と`@Sendable async`なクロージャ�
 @discardableResult init(priority: TaskPriority? = nil, operation: @escaping @Sendable () async -> Success)
 ```
 
-Appleドキュメント: https://developer.apple.com/documentation/swift/task/3856790-init
+ドキュメント: https://developer.apple.com/documentation/swift/task/3856790-init
 
 - `@discardableResult`
 
@@ -48,7 +46,7 @@ Appleドキュメント: https://developer.apple.com/documentation/swift/task/38
 
 これによってPriority Inversion(優先順位の逆転)を防ぐことができる。
 
-https://developer.apple.com/documentation/swift/taskpriority
+ドキュメント: https://developer.apple.com/documentation/swift/taskpriority
 
 
 ここまではAppleのドキュメントにも載っているが、実装を見てみると、他にも属性がついている。
@@ -70,7 +68,7 @@ extension Task where Failure == Error {
 - `@_alwaysEmitIntoClient`
 
 クライアントコードの関数の本文に強制的に埋め込まれる。ABIを壊さずに実装を入れ替えることができる。
-https://github.com/apple/swift/blob/967a8b439f8dbd4580f652e378bb246e6eddb3c8/docs/ReferenceGuides/UnderscoredAttributes.md#_alwaysemitintoclient
+ドキュメント: https://github.com/apple/swift/blob/967a8b439f8dbd4580f652e378bb246e6eddb3c8/docs/ReferenceGuides/UnderscoredAttributes.md#_alwaysemitintoclient
 
 
 - `@_inheritActorContext`
@@ -127,7 +125,7 @@ final class SomeViewController: UIViewController {
 }
 ```
 
-https://github.com/apple/swift/blob/967a8b439f8dbd4580f652e378bb246e6eddb3c8/docs/ReferenceGuides/UnderscoredAttributes.md#_inheritactorcontext
+ドキュメント: https://github.com/apple/swift/blob/967a8b439f8dbd4580f652e378bb246e6eddb3c8/docs/ReferenceGuides/UnderscoredAttributes.md#_inheritactorcontext
 
 - `@_implicitSelfCapture`
 
@@ -145,7 +143,7 @@ class C {
 }
 ```
 
-https://github.com/apple/swift/blob/967a8b439f8dbd4580f652e378bb246e6eddb3c8/docs/ReferenceGuides/UnderscoredAttributes.md#_implicitselfcapture
+ドキュメント: https://github.com/apple/swift/blob/967a8b439f8dbd4580f652e378bb246e6eddb3c8/docs/ReferenceGuides/UnderscoredAttributes.md#_implicitselfcapture
 
 - `@escaping`
 
@@ -266,7 +264,7 @@ struct SomeStruct {
 }
 ```
 
-https://docs.swift.org/swift-book/LanguageGuide/Closures.html#ID546
+ドキュメント: https://docs.swift.org/swift-book/LanguageGuide/Closures.html#ID546
 
 escapingクロージャでメモリリークを起こす例を下記に示す。
 
@@ -363,7 +361,7 @@ final class DetailViewController: UIViewController {
 
 `Task`に渡されたクロージャの場合は、実行が開始されると全ての処理がその場で実行され、`self`の参照も本文内で完結するためメモリリークは起こらない。
 
-https://github.com/apple/swift-evolution/blob/main/proposals/0304-structured-concurrency.md#implicit-self
+プロポーザル: https://github.com/apple/swift-evolution/blob/main/proposals/0304-structured-concurrency.md#implicit-self
 
 ### Taskでもインスタンスの解放遅延問題は起きる
 
@@ -451,13 +449,13 @@ final class DetailViewController: UIViewController {
 try Task.checkCancellation() // キャンセルされていた場合はCancellationErrorをスローする
 ```
 
-https://developer.apple.com/documentation/swift/task/3814826-checkcancellation
+ドキュメント: https://developer.apple.com/documentation/swift/task/3814826-checkcancellation
 
 ```swift
 Task.isCancelled // キャンセルされていた場合はtrueを返す
 ```
 
-https://developer.apple.com/documentation/swift/task/3814833-iscancelled
+ドキュメント: https://developer.apple.com/documentation/swift/task/3814833-iscancelled
 
 ### 無限ループでTaskのイニシャライザ内でもメモリリークが発生することがある
 
@@ -507,8 +505,6 @@ final class DetailViewController: UIViewController {
 
 ## 参考リンク
 
-### Forums
-
-### その他
-
 - [Memory management when using async/await in Swift](https://www.swiftbysundell.com/articles/memory-management-when-using-async-await)
+- [What is @escaping in Swift closures](https://sarunw.com/posts/what-is-escaping-in-swift-closures/)
+
