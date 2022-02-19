@@ -6,6 +6,8 @@
     - [Taskイニシャライザの定義](#taskイニシャライザの定義)
     - [クロージャ内のself](#クロージャ内のself)
       - [メモリリーク](#メモリリーク)
+        - [`class`など参照型のプロパティにクロージャを割り当てる](#classなど参照型のプロパティにクロージャを割り当てる)
+        - [escapingクロージャの内部で`class`などの参照型を参照する](#escapingクロージャの内部でclassなどの参照型を参照する)
       - [インスタンスの解放遅延](#インスタンスの解放遅延)
     - [Taskのイニシャライザはメモリリークを起こさない？](#taskのイニシャライザはメモリリークを起こさない)
     - [Taskでもインスタンスの解放遅延問題は起きる](#taskでもインスタンスの解放遅延問題は起きる)
@@ -145,6 +147,10 @@ class C {
 
 https://github.com/apple/swift/blob/967a8b439f8dbd4580f652e378bb246e6eddb3c8/docs/ReferenceGuides/UnderscoredAttributes.md#_implicitselfcapture
 
+- `@escaping`
+
+クロージャを保持する関数の実行を抜けた後に実行される可能性があることを示す。
+
 - `__owned`
 
 メモリ管理に使われるキーワードで、呼び出し側から引数の所有権が譲渡される(retainする)
@@ -158,6 +164,8 @@ https://github.com/apple/swift/blob/967a8b439f8dbd4580f652e378bb246e6eddb3c8/doc
 
 #### メモリリーク
 
+##### `class`など参照型のプロパティにクロージャを割り当てる
+
 `class`のプロパティにクロージャを割り当て、`self`をそのクロージャの内部で直接使用する(インスタンスのプロパティにアクセスしたり、メソッドを呼び出す)と、`self`を強参照し、強参照サイクルが発生する。クロージャは`class`と同様に参照型のため、クロージャをプロパティに割り当てるとそのクロージャの参照を割り当てていることになり、`self`が`self`のプロパティを参照し、`self`のプロパティが`self`を参照する。そうすると、お互いがインスタンスの解放しようとしても参照カウンタが0にならないので解放できない状態になってしまう。
 
 例えば、下記の`DetailViewController`では、クロージャの参照を保持する`action`プロパティの中で、`number`プロパティにアクセスしていることで強参照が発生している。そのため、このクラスの`deinit`が呼ばれることがない。
@@ -167,15 +175,16 @@ class DetailViewController: UIViewController {
     ...
 
     private var number: Int
-
-    // ↓↓↓↓↓↓↓↓↓強参照サイクル↓↓↓↓↓↓↓↓↓↓↓↓
-    private lazy var action: (Int) -> Void = { number in
-        self.number = number
-    }
+    private var action: ((Int) -> Void)?
 
     init(number: Int) {
         self.number = number
         super.init(nibName: nil, bundle: nil)
+
+        // ↓↓↓↓↓↓↓↓↓強参照サイクル↓↓↓↓↓↓↓↓↓↓↓↓
+        action = { number in
+            self.number = number
+        }
     }
     deinit {　print("deinit")　}
 }
@@ -199,6 +208,116 @@ self.action = { [weak self] number in
 // selfが解放されている場合はcrashするので注意が必要
 self.action = { [unowned self] number in
     self.number = number
+}
+```
+
+##### escapingクロージャの内部で`class`などの参照型を参照する
+
+クロージャが関数の引数として渡され、その関数が戻り値を返した(終了した)後に実行される場合に関数をescapeすると呼ぶ。その場合`@escaping`を引数の型の前に付ける。
+
+クロージャがescapeする例としては、非同期処理の完了後に呼び出すcompletionHandlerなどがある。このクロージャ内で`class`などの参照型の`self`
+を参照する場合、簡単に強参照サイクルが発生する可能性がある(後述)。そのため、そういった場合は`self`を明示的に記載する必要がある(上記のクラスプロパティにクロージャを割り当てた場合もescapingクロージャと見なされる)。  
+一方でnon-escapingクロージャは、渡された関数が値を返す(終了する)前に実行され、クロージャ内全ての参照は関数が値を返す(終了する)前に解放されることが保証されるため、強参照サイクルのリスクがない(`self`を明示する必要はない)。
+
+```swift
+func someFunctionWithNonescapingClosure(closure: () -> Void) {
+    closure()
+}
+
+class SomeClass {
+    var x = 10
+    func doSomething() {
+        someFunctionWithEscapingClosure { self.x = 100 } // self要
+        someFunctionWithNonescapingClosure { x = 200 } // self不要
+    }
+}
+
+let instance = SomeClass()
+instance.doSomething()
+print(instance.x)
+// Prints "200"
+
+completionHandlers.first?()
+print(instance.x)
+// Prints "100"
+```
+
+キャプチャリストを使うことで`self`を省略することもできる。
+
+```swift
+class SomeOtherClass {
+    var x = 10
+    func doSomething() {
+        someFunctionWithEscapingClosure { [self] in x = 100 }
+        someFunctionWithNonescapingClosure { x = 200 }
+    }
+}
+```
+
+`struct`や`enum`などの値型のインスタンスは`self`の可変の参照をescapingクロージャに渡すことはできないため、`self`を明示的に記載する必要がない。
+
+```swift
+struct SomeStruct {
+    var x = 10
+    mutating func doSomething() {
+        someFunctionWithNonescapingClosure { x = 200 }  // ⭕️
+        someFunctionWithEscapingClosure { x = 100 }     // ❌
+    }
+}
+```
+
+https://docs.swift.org/swift-book/LanguageGuide/Closures.html#ID546
+
+escapingクロージャでメモリリークを起こす例を下記に示す。
+
+```swift
+final class LocationManager: NSObject, CLLocationManagerDelegate {
+    let locationManager: CLLocationManager
+
+    private var completionHandler: ((_ location: CLLocation) -> Void)?
+
+    ...
+
+    func getCurrentLocation(_ completion: @escaping (_ location: CLLocation) -> Void) {
+        completionHandler = completion // ①
+        locationManager.requestLocation()
+    }
+
+    // MARK: - CLLocationManagerDelegate
+
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        if let location = locations.first {
+            completionHandler?(location)
+            completionHandler = nil
+        }
+    }
+
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {}
+}
+
+class LocationViewController: UIViewController {
+    let locationManager = LocationManager() // ②
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        locationManager.getCurrentLocation { (location) in
+            self.title = location.description // ③
+        }
+    }
+}
+```
+①LocationManagerがcompletionを保持する  
+②DetailViewControllerがLocationManagerを保持  
+③selfを強参照。このcompletionはLocationManagerで保持されているため、DetailViewControllerとLocationManagerで強参照サイクルが起きる  
+
+このサイクルが消えるのは、位置情報の更新が成功した際に、`completionHandler`に`nil`が設定された場合のみ
+
+```swift
+func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+    if let location = locations.first {
+        completionHandler?(location)
+        completionHandler = nil // ここでサイクルが消える
+    }
 }
 ```
 
@@ -242,7 +361,7 @@ final class DetailViewController: UIViewController {
 
 ### Taskのイニシャライザはメモリリークを起こさない？
 
-`Task`の場合、本文は即時に実行されてnon-escapingと見なされるため、`self`の参照も本文内で完結するためメモリリークは起こらない。
+`Task`に渡されたクロージャの場合は、実行が開始されると全ての処理がその場で実行され、`self`の参照も本文内で完結するためメモリリークは起こらない。
 
 https://github.com/apple/swift-evolution/blob/main/proposals/0304-structured-concurrency.md#implicit-self
 
@@ -325,6 +444,20 @@ final class DetailViewController: UIViewController {
 ```
 
 `viewWillAppear`で`cancel`が呼ばれることで、`sleep`メソッドが`CancellationError`をスローするため、`catch`句に入り、`showAlert`は呼ばれない。
+
+キャンセルしないものに関しては手動でキャンセルのチェックをする必要がある。
+
+```swift
+try Task.checkCancellation() // キャンセルされていた場合はCancellationErrorをスローする
+```
+
+https://developer.apple.com/documentation/swift/task/3814826-checkcancellation
+
+```swift
+Task.isCancelled // キャンセルされていた場合はtrueを返す
+```
+
+https://developer.apple.com/documentation/swift/task/3814833-iscancelled
 
 ### 無限ループでTaskのイニシャライザ内でもメモリリークが発生することがある
 
