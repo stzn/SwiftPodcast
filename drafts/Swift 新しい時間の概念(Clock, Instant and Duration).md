@@ -2,12 +2,13 @@
 
 - [Swift 新しい時間の概念(Clock, Instant and Duration)](#swift-新しい時間の概念clock-instant-and-duration)
   - [概要](#概要)
+  - [用語紹介](#用語紹介)
   - [内容](#内容)
     - [時間の3つの概念](#時間の3つの概念)
+      - [APIの例](#apiの例)
+        - [Foundation](#foundation)
+        - [Dispatch](#dispatch)
     - [現状の問題点](#現状の問題点)
-      - [Foundation](#foundation)
-      - [Dispatch](#dispatch)
-    - [用語説明](#用語説明)
     - [統一的な時間の概念を定義するために必要なこと](#統一的な時間の概念を定義するために必要なこと)
     - [今回の提案の範囲](#今回の提案の範囲)
     - [提案の詳細](#提案の詳細)
@@ -33,6 +34,13 @@
 
 現在、Swiftで時間を扱う方法はたくさんあるが、統一的で汎用的な方法が存在しない。今回新たに時間の概念を定義し、それを使って時間を扱うAPIを導入したい。
 
+## 用語紹介
+
+エポック: 時刻の基準点
+realtime, wall-clock time: プログラムの開始から終了までを計測した時間。NTPなどで変更されることがある。
+uptime time: どのくらいマシンが起動しているかの経過秒数
+monotonic clock(モノトニック時間): 何らかのエポックからの単調増加な時刻。決して後戻りすることがない。システム・コール関数などで使う。
+
 ## 内容
 
 ### 時間の3つの概念
@@ -41,29 +49,24 @@
 2. ある瞬間を表す概念(= 瞬間 instantと呼ばれる)
 3. 経過時間を測定する概念(= 期間 durationと呼ばれる)
 
-### 現状の問題点
+時間の計測は、ネットワークコネクションのタイムアウトといった高度な概念から、あるタスクがsleepする時間量まで、多岐に渡ってAPIの多くの型で使用されている。現在、時間の測定を行うAPIは、`NSTimeInterval`(別名`TimeInterval`)、`DispatchTimeInterval`、さらには`timespec`などの型を取る。
 
-この3つを表すAPIや型がたくさんある。同時並行処理を扱う場合、これらのすべての概念への統一されたアクセサがあれば、sleep、他の時間的概念に必要なプリミティブを構築するのに役立つ。
+#### APIの例
 
-APIの例
-
-#### Foundation
+##### Foundation
 
 - `Date`: UTC時間の2001年1月1日を起点としてある瞬間を構築する
 - `TimeInterval`: 2つの瞬間の期間を秒数で表す
 
-#### Dispatch
+##### Dispatch
 
 - `DispatchTime`: システムが起動してからの時間
 - `DispatchWallTime`: プログラムの開始から終了までを計測した時間
 - `DispatchTimeInterval`: 秒、ミリ秒、マイクロ秒、ナノ秒の値
 
-### 用語説明
+### 現状の問題点
 
-エポック: 時刻の基準点
-realtime, wall-clock time: プログラムの開始から終了までを計測した時間。NTPなどで変更されることがある。
-uptime time: どのくらいマシンが起動しているかの経過秒数
-monotonic clock(モノトニック時間): 何らかのエポックからの単調増加な時刻。決して後戻りすることがない。システム・コール関数などで使う。
+この3つを表すAPIや型がたくさんある。同時並行処理を扱う場合、これらのすべての概念への統一されたアクセサがあれば、sleep、他の時間的概念に必要なプリミティブを構築するのに役立つ。
 
 ### 統一的な時間の概念を定義するために必要なこと
 
@@ -92,15 +95,17 @@ monotonic clock(モノトニック時間): 何らかのエポックからの単�
 
 ```swift
 public protocol Clock: Sendable {
-  associatedtype Instant: InstantProtocol
-  
-  var now: Instant { get }
-  
-  func sleep(until deadline: Instant, tolerance: Instant.Duration?) async throws 
+    associatedtype Instant: InstantProtocol
 
-  var minimumResolution: Instant.Duration { get }
-  
-  func measure(_ work: () async throws -> Void) reasync rethrows -> Duration
+    var now: Instant { get }
+
+    func sleep(until deadline: Instant, tolerance: Instant.Duration?) async throws 
+
+    var minimumResolution: Instant.Duration { get }
+}
+
+extension Clock {
+    func measure(_ work: () async throws -> Void) reasync rethrows -> Instant.Duration
 }
 ```
 
@@ -131,19 +136,19 @@ let elapsed = someClock.measure {
 
 ```swift
 public protocol InstantProtocol: Comparable, Hashable, Sendable {
-  associatedtype Duration: DurationProtocol
-  func advanced(by duration: Duration) -> Self
-  func duration(to other: Self) -> Duration
+    associatedtype Duration: DurationProtocol
+    func advanced(by duration: Duration) -> Self
+    func duration(to other: Self) -> Duration
 }
 
 extension InstantProtocol {
-  public static func + (_ lhs: Self, _ rhs: Duration) -> Self
-  public static func - (_ lhs: Self, _ rhs: Duration) -> Self
-  
-  public static func += (_ lhs: inout Self, _ rhs: Duration)
-  public static func -= (_ lhs: inout Self, _ rhs: Duration)
-  
-  public static func - (_ lhs: Self, _ rhs: Self) -> Duration
+    public static func + (_ lhs: Self, _ rhs: Duration) -> Self
+    public static func - (_ lhs: Self, _ rhs: Duration) -> Self
+
+    public static func += (_ lhs: inout Self, _ rhs: Duration)
+    public static func -= (_ lhs: inout Self, _ rhs: Duration)
+
+    public static func - (_ lhs: Self, _ rhs: Self) -> Duration
 }
 ```
 
@@ -153,12 +158,12 @@ extension InstantProtocol {
 
 ```swift
 public protocol DurationProtocol: Comparable, AdditiveArithmetic, Sendable {
-  static func / (_ lhs: Self, _ rhs: Int) -> Self
-  static func /= (_ lhs: inout Self, _ rhs: Int)
-  static func * (_ lhs: Self, _ rhs: Int) -> Self
-  static func *= (_ lhs: inout Self, _ rhs: Int)
-  
-  static func / (_ lhs: Self, _ rhs: Self) -> Double
+    static func / (_ lhs: Self, _ rhs: Int) -> Self
+    static func /= (_ lhs: inout Self, _ rhs: Int)
+    static func * (_ lhs: Self, _ rhs: Int) -> Self
+    static func *= (_ lhs: inout Self, _ rhs: Int)
+
+    static func / (_ lhs: Self, _ rhs: Self) -> Double
 }
 ```
 
@@ -170,22 +175,22 @@ public protocol DurationProtocol: Comparable, AdditiveArithmetic, Sendable {
 
 直列化可能(`Codable`)、比較可能(`Comparable`)、`Key`として保存できる(`Hashable`)、加算できる(`AdditiveArithmetic`)ようになっている。
 
-ストレージは、除算時な適切な丸め精度（露出よりも高い精度を保存する可能性が高い）と、潜在的に合理的な`Instant`に十分な範囲を内部に保証しなければならない。これは、秒とナノ秒を損失のないスケールで+/-数千年の全範囲にまたがって保存することができることを指す。
+`Duration`は、除算時の適切な丸め精度（外に現れるよりも高い精度を保持する可能性が高い）と、潜在的に合理的な期間の全範囲をカバーするのに十分な範囲を保証する。これは、秒とナノ秒を保持することで、+/-数千年の全範囲を損失のないスケールでカバーできることを指す。すべてのシステムがその全範囲を必要とするわけではないが、オペレーティングシステムで表現される全範囲にわたってナノ秒の精度を適切に表すには、これらの値を表すためにSwiftが完全な128ビットストレージで動作する必要がある。そのため、期間を2つのコンポーネントに分割するため、既存のタイプへの変換を公開する必要がある。期間のこれらのコンポーネントは、秒部分およびアト秒部分としての `timespec`などの既存のAPIとの相互運用性のために公開される(完全な精度が失われないようにするために使用)。Swiftが128ビットのストレージをサポートできる符号付き整数型を導入した場合、`Duration`は、コンポーネントのアクセサとイニシャライザを、格納されているアト秒への直接アクセスと初期化に置き換えることを検討する必要がある。
 
 ```swift
 public struct Duration: Sendable {
-  public var seconds: Int64 { get }
-  public var nanoseconds: Int64 { get }
+    public var components: (seconds: Int64, attoseconds: Int64) { get }
+    public init(secondsComponent: Int64, attosecondsComponent: Int64)
 }
 
 extension Duration {
-  public static func seconds<T: BinaryInteger>(_ seconds: T) -> Duration
-  public static func seconds(_ seconds: Double) -> Duration
-  public static func milliseconds<T: BinaryInteger>(_ milliseconds: T) -> Duration
-  public static func milliseconds(_ milliseconds: Double) -> Duration
-  public static func microseconds<T: BinaryInteger>(_ microseconds: T) -> Duration
-  public static func microseconds(_ microseconds: Double) -> Duration
-  public static func nanoseconds<T: BinaryInteger>(_ value: T) -> Duration
+    public static func seconds<T: BinaryInteger>(_ seconds: T) -> Duration
+    public static func seconds(_ seconds: Double) -> Duration
+    public static func milliseconds<T: BinaryInteger>(_ milliseconds: T) -> Duration
+    public static func milliseconds(_ milliseconds: Double) -> Duration
+    public static func microseconds<T: BinaryInteger>(_ microseconds: T) -> Duration
+    public static func microseconds(_ microseconds: Double) -> Duration
+    public static func nanoseconds<T: BinaryInteger>(_ value: T) -> Duration
 }
 
 extension Duration: Codable { }
@@ -195,15 +200,15 @@ extension Duration: Comparable { }
 extension Duration: AdditiveArithmetic { }
 
 extension Duration {
-  public static func / (_ lhs: Duration, _ rhs: Double) -> Duration
-  public static func /= (_ lhs: inout Duration, _ rhs: Double)
-  public static func / (_ lhs: Duration, _ rhs: Int) -> Duration
-  public static func /= (_ lhs: inout Duration, _ rhs: Int)
-  public static func / (_ lhs: Duration, _ rhs: Duration) -> Double
-  public static func * (_ lhs: Duration, _ rhs: Double) -> Duration
-  public static func *= (_ lhs: inout Duration, _ rhs: Double)
-  public static func * (_ lhs: Duration, _ rhs: Int) -> Duration
-  public static func *= (_ lhs: inout Duration, _ rhs: Int)
+    public static func / (_ lhs: Duration, _ rhs: Double) -> Duration
+    public static func /= (_ lhs: inout Duration, _ rhs: Double)
+    public static func / (_ lhs: Duration, _ rhs: Int) -> Duration
+    public static func /= (_ lhs: inout Duration, _ rhs: Int)
+    public static func / (_ lhs: Duration, _ rhs: Duration) -> Double
+    public static func * (_ lhs: Duration, _ rhs: Double) -> Duration
+    public static func *= (_ lhs: inout Duration, _ rhs: Double)
+    public static func * (_ lhs: Duration, _ rhs: Int) -> Duration
+    public static func *= (_ lhs: inout Duration, _ rhs: Int)
 }
 
 extension Duration: DurationProtocol { }
@@ -222,28 +227,28 @@ Darwinの場合はmonotonic clockに由来する時間を参照する。Linuxの
 ```swift
 
 public struct ContinuousClock {
-  public init()
-  
-  public static var now: Instant { get }
+    public init()
+
+    public static var now: Instant { get }
 }
 
 extension ContinuousClock: Clock {
-  public struct Instant {
-    public static var now: ContinuousClock.Instant { get }
-  }
+    public struct Instant {
+        public static var now: ContinuousClock.Instant { get }
+    }
 
-  public var now: Instant { get }
-  public var minimumResolution: Duration { get }
-  public func sleep(until deadline: Instant, tolerance: Duration? = nil) async throws
+    public var now: Instant { get }
+    public var minimumResolution: Duration { get }
+    public func sleep(until deadline: Instant, tolerance: Duration? = nil) async throws
 }
 
 extension ContinuousClock.Instant: InstantProtocol {
-  public func advanced(by duration: Duration) -> ContinuousClock.Instant
-  public func duration(to other: ContinuousClock.Instant) -> Duration
+    public func advanced(by duration: Duration) -> ContinuousClock.Instant
+    public func duration(to other: ContinuousClock.Instant) -> Duration
 }
 
 extension Clock where Self == ContinuousClock {
-  public static var continuous: ContinuousClock { get }
+    public static var continuous: ContinuousClock { get }
 }
 ```
 
@@ -255,27 +260,27 @@ Darwinの場合はmonotonic clockに由来する時間を参照する。Linuxの
 
 ```swift
 public struct SuspendingClock {
-  public init()
-  
-  public static var now: Instant { get }
+    public init()
+
+    public static var now: Instant { get }
 }
 
 extension SuspendingClock: Clock {
-  public struct Instant {
-    public static var now: SuspendingClock.Instant { get }
-  }
+    public struct Instant {
+        public static var now: SuspendingClock.Instant { get }
+    }
 
-  public var minimumResolution: Duration { get }
-  public func sleep(until deadline: Instant, tolerance: Duration? = nil) async throws
+    public var minimumResolution: Duration { get }
+    public func sleep(until deadline: Instant, tolerance: Duration? = nil) async throws
 }
 
 extension SuspendingClock.Instant: InstantProtocol {
-  public func advanced(by duration: Duration) -> SuspendingClock.Instant
-  public func duration(to other: SuspendingClock.Instant) -> Duration
+    public func advanced(by duration: Duration) -> SuspendingClock.Instant
+    public func duration(to other: SuspendingClock.Instant) -> Duration
 }
 
 extension Clock where Self == SuspendingClock {
-  public static var suspending: SuspendingClock { get }
+    public static var suspending: SuspendingClock { get }
 }
 ```
 
@@ -294,37 +299,37 @@ UTCベースのカレンダーの概念を伴ったFoundation内の`Clock`
 ```swift
 
 public struct UTCClock {
-  public init()
-  
-  public static var now: Date { get }
+    public init()
+
+    public static var now: Date { get }
 }
 
 extension UTCClock: Clock {
-  public var minimumResolution: Duration { get }
-  public func sleep(until deadline: Date, tolerance: Duration? = nil) async throws
+    public var minimumResolution: Duration { get }
+    public func sleep(until deadline: Date, tolerance: Duration? = nil) async throws
 }
 
 extension Date {
-  public func leapSeconds(to other: Date) -> Duration
-  public init(_ instant: ContinuousClock.Instant)
-  public init(_ instant: SuspendingClock.Instant)
+    public func leapSeconds(to other: Date) -> Duration
+    public init(_ instant: ContinuousClock.Instant)
+    public init(_ instant: SuspendingClock.Instant)
 }
 
 extension ContinuousClock.Instant {
-  public init?(_ instant: Date)
+    public init?(_ instant: Date)
 }
 
 extension SuspendingClock.Instant {
-  public init?(_ instant: Date)
+    public init?(_ instant: Date)
 }
 
 extension Date: InstantProtocol {
-  public func advanced(by duration: Duration) -> Date
-  public func duration(to other: Date) -> Duration
+    public func advanced(by duration: Duration) -> Date
+    public func duration(to other: Date) -> Duration
 }
 
 extension Clock where Self == UTCClock {
-  public static var utc: UTCClock { get }
+    public static var utc: UTCClock { get }
 }
 ```
 
@@ -342,15 +347,15 @@ extension Clock where Self == UTCClock {
 
 ```swift
 extension Task {
-  @available(*, deprecated, renamed: "Task.sleep(for:)")
-  public static func sleep(_ duration: UInt64) async
-  
-  @available(*, deprecated, renamed: "Task.sleep(for:)")
-  public static func sleep(nanoseconds duration: UInt64) async throws
-  
-  public static func sleep(for: Duration) async throws
-  
-  public static func sleep<C: Clock>(until deadline: C.Instant, tolerance: C.Instant.Duration? = nil, clock: C) async throws
+    @available(*, deprecated, renamed: "Task.sleep(for:)")
+    public static func sleep(_ duration: UInt64) async
+
+    @available(*, deprecated, renamed: "Task.sleep(for:)")
+    public static func sleep(nanoseconds duration: UInt64) async throws
+
+    public static func sleep(for: Duration) async throws
+
+    public static func sleep<C: Clock>(until deadline: C.Instant, tolerance: C.Instant.Duration? = nil, clock: C) async throws
 }
 ```
 
@@ -365,76 +370,76 @@ extension Task {
 ```swift
 
 public final class ManualClock: Clock, @unchecked Sendable {
-  public struct Instant: InstantProtocol {
-    var offset: Duration = .zero
-    
-    public func advanced(by duration: Duration) -> ManualClock.Instant {
-      Instant(offset: offset + duration)
+    public struct Instant: InstantProtocol {
+        var offset: Duration = .zero
+
+        public func advanced(by duration: Duration) -> ManualClock.Instant {
+            Instant(offset: offset + duration)
+        }
+
+        public func duration(to other: ManualClock.Instant) -> Duration {
+            other.offset - offset
+        }
+
+        public static func < (_ lhs: ManualClock.Instant, _ rhs: ManualClock.Instant) -> Bool {
+            lhs.offset < rhs.offset
+        }
     }
-    
-    public func duration(to other: ManualClock.Instant) -> Duration {
-      other.offset - offset
+
+    struct WakeUp {
+        var when: Instant
+        var continuation: UnsafeContinuation<Void, Never>
     }
-    
-    public static func < (_ lhs: ManualClock.Instant, _ rhs: ManualClock.Instant) -> Bool {
-      lhs.offset < rhs.offset
+
+    public private(set) var now = Instant()
+
+    // 効率的にデータ構造を最適化して、実行順序も保証された
+    // ウェイクアップしたいスリープポイントを保持する汎用的なストレージ
+    var wakeUps = [WakeUp]()
+
+    // 現在時刻の調整やウェークアップは異なるスレッドやTaskから行われる可能性があるため
+    // ロックで制御する必要がある(critical sectionを作成する)
+    let lock = os_unfair_lock_t.allocate(capacity: 1)
+
+    deinit {
+        lock.deallocate()
     }
-  }
-  
-  struct WakeUp {
-    var when: Instant
-    var continuation: UnsafeContinuation<Void, Never>
-  }
-  
-  public private(set) var now = Instant()
-  
-  // 効率的にデータ構造を最適化して、実行順序も保証された
-  // ウェイクアップしたいスリープポイントを保持する汎用的なストレージ
-  var wakeUps = [WakeUp]()
-  
-  // 現在時刻の調整やウェークアップは異なるスレッドやTaskから行われる可能性があるため
-  // ロックで制御する必要がある(critical sectionを作成する)
-  let lock = os_unfair_lock_t.allocate(capacity: 1)
-  
-  deinit {
-    lock.deallocate()
-  }
-  
-  public func sleep(until deadline: Instant, tolerance: Duration? = nil) async throws {
-    // 保留中のウェイクアップをリストにエンキューする
-    return await withUnsafeContinuation {
-      if deadline <= now {
-        $0.resume()
-      } else {
+
+    public func sleep(until deadline: Instant, tolerance: Duration? = nil) async throws {
+        // 保留中のウェイクアップをリストにエンキューする
+        return await withUnsafeContinuation {
+            if deadline <= now {
+                $0.resume()
+            } else {
+                os_unfair_lock_lock(lock)
+                wakeUps.append(WakeUp(when: deadline, continuation: $0))
+                os_unfair_lock_unlock(lock)
+            }
+        }
+    }
+
+    public func advance(by amount: Duration) {
+        // 現在時刻を進めて、実行が必要な保留中のウェイクアップを集める
         os_unfair_lock_lock(lock)
-        wakeUps.append(WakeUp(when: deadline, continuation: $0))
+        now += amount
+        var toService = [WakeUp]()
+        for index in (0..<(wakeUps.count)).reversed() {
+            let wakeUp = wakeUps[index]
+            if wakeUp.when <= now {
+                toService.insert(wakeUp, at: 0)
+                wakeUps.remove(at: index)
+            }
+        }
         os_unfair_lock_unlock(lock)
-      }
+
+        // ロック外で実行する
+        toService.sort { lhs, rhs -> Bool in
+           lhs.when < rhs.when
+        }
+        for item in toService {
+            item.continuation.resume()
+        }
     }
-  }
-  
-  public func advance(by amount: Duration) {
-    // 現在時刻を進めて、実行が必要な保留中のウェイクアップを集める
-    os_unfair_lock_lock(lock)
-    now += amount
-    var toService = [WakeUp]()
-    for index in (0..<(wakeUps.count)).reversed() {
-      let wakeUp = wakeUps[index]
-      if wakeUp.when <= now {
-        toService.insert(wakeUp, at: 0)
-        wakeUps.remove(at: index)
-      }
-    }
-    os_unfair_lock_unlock(lock)
-    
-    // ロック外で実行する
-    toService.sort { lhs, rhs -> Bool in
-      lhs.when < rhs.when
-    }
-    for item in toService {
-      item.continuation.resume()
-    }
-  }
 }
 ```
 
@@ -449,10 +454,11 @@ https://forums.swift.org/t/se-0329-third-review-clock-instant-and-duration/54727
 ### プロポーザルドキュメント
 
 - [Clock, Instant, and Duration](https://github.com/apple/swift-evolution/blob/main/proposals/0329-clock-instant-duration.md)
+- [[Accepted] SE-0329: Clock, Instant, and Duration](https://forums.swift.org/t/accepted-se-0329-clock-instant-and-duration/55324)
 
 ### 関連PR
 
-- https://github.com/apple/swift/pull/40609
+- [Clock/Instant/Duration](https://github.com/apple/swift/pull/40609)
 
 ### その他
 
