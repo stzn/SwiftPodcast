@@ -3,10 +3,11 @@
 - [Swift Opaque Parameter Types 引数でもsomeが使えるように](#swift-opaque-parameter-types-引数でもsomeが使えるように)
   - [概要](#概要)
   - [内容](#内容)
-    - [提案内容](#提案内容)
+    - [問題点](#問題点)
+    - [解決策](#解決策)
     - [詳細](#詳細)
       - [可変個ジェネリクス(Variadic generics)](#可変個ジェネリクスvariadic-generics)
-      - [関数型の「消費」ポジションのOpaque parameter¥](#関数型の消費ポジションのopaque-parameter)
+      - [関数型の「消費」ポジションのOpaque parameter](#関数型の消費ポジションのopaque-parameter)
     - [将来的な検討事項](#将来的な検討事項)
       - [プロトコルの関連型(associated types)に制約を加える](#プロトコルの関連型associated-typesに制約を加える)
       - [「消費」ポジションのOpaque typeを使えるようにする](#消費ポジションのopaque-typeを使えるようにする)
@@ -16,9 +17,11 @@
 
 ## 概要
 
-Swiftのジェネリクス構文は、一般性を考慮して設計されており、関数のさまざまな入力と出力の間で複雑な制約のセットを表現できる。しかし、シンプルな制約を設定したい場合、この制約の指定方法は必要以上に宣言が複雑になってしまう。今回Opaque Result Typeのシンタックスを拡張してこの複雑さを減らす。
+Swiftのジェネリクス構文は、複雑な制約を表現できるように設計されているものの、シンプルな制約を設定したい場合、この制約の指定方法は必要以上に宣言が複雑になってしまう。今回Opaque Result Typeのシンタックスを拡張してこの複雑さを減らす。Swift5.7で導入予定。
 
 ## 内容
+
+### 問題点
 
 Swiftのジェネリクス構文は、一般性を考慮して設計されており、関数のさまざまな入力と出力の間で複雑な制約のセットを表現できる。例えば下記の例では、2つのシーケンスから1つの配列を生成する即時連結処理を考えてみる。
 
@@ -47,7 +50,8 @@ eagerConcatenate([1, 2, 3], ["Hello", "World"]) // ❌ [Int]と[String]は違う
 一方でこのような複雑な制約が不要な場合、このシンタックスはとても負担に感じる。例えば、SwiftUIの2つのViewを水平に組み合わせる処理を考える:
 
 ```swift
-func horizontal<V1: View, V2: View>(_ v1: V1, _ v2: V2) -> some View {
+
+func horizontal(_ v1: some View, _ v2: some View) -> some View {
     HStack {
         v1
         v2
@@ -55,7 +59,7 @@ func horizontal<V1: View, V2: View>(_ v1: V1, _ v2: V2) -> some View {
 }
 ```
 
-### 提案内容
+### 解決策
 
 一度しか使われていないジェネリックパラメータの`V1`と`V2`を宣言するだけなのに多くのボイラープレートが必要で、実態以上に複雑に見える。
 
@@ -64,11 +68,11 @@ func horizontal<V1: View, V2: View>(_ v1: V1, _ v2: V2) -> some View {
 このプロポーザルでは、opaque result typeのシンタックスをジェネリックな関数の引数でも使えるようにする(ジェネリックパラメータを用いたボイラープレートはいらなくなる)。
 
 ```swift
-func horizontal(_ v1: some View, _ v2: some View) -> some View {
-    HStack {
-        v1
-        v2
-    }
+func horizontal<V1: View, V2: View>(_ v1: V1, _ v2: V2) -> some View {
+  HStack {
+    v1
+    v2
+  }
 }
 ```
 
@@ -84,7 +88,7 @@ func f(_ p: some P) { }
 func f<_T: P>(_ p: _T)
 ```
 
-注意が必要な点は、このopaque typeの型は型推論を通して**呼び出し元**で決められる。
+注意が必要な点は、このopaque typeの型は型推論を通して**呼び出し元**で決められる。(逆に戻り値に`some`キーワードを使うと、**呼び出し先(実装側)**で決められる。)
 
 ```swift
 f(17)      // ⭕️ opaque typeはInt
@@ -155,7 +159,7 @@ acceptLots("Hello", "Swift", "World") // ⭕️ Ts 3個のString型を含む
 acceptLots(Swift, 6)                  // ⭕️ Ts StringとInt型を含む
 ```
 
-#### 関数型の「消費」ポジションのOpaque parameter¥
+#### 関数型の「消費」ポジションのOpaque parameter
 
 ※ 関数型の「消費」ポジションとは、渡した先で値を代入する位置
 
