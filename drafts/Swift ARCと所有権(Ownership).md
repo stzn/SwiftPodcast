@@ -89,7 +89,7 @@ MyController(delegate).callDelegate()
 
 そこで、パフォーマンスが重要なケースでは最適化が必要ではあるが、開発者の直感にも従うように言語のルールを変更した方が筋が通ると考え、変数のスコープの終わりと存続期間を紐づける。そうすると、弱参照へのアクセスやポインタを使用する場合などに、オプティマイザがライフタイムを短くすることを防ぐようにする(deinitialization barriers)。
 
-これによって`withExtendedLifetime`を使うようなケースが減る。C++のstict scoping modelよりは厳密ではなく、`deinit`の順番は保証しない(が、これは大きい問題ではないと考えられる)。
+これによって`withExtendedLifetime`を使うようなケースが減る。C++のstrict scoping modelよりは厳密ではなく、`deinit`の順番は保証しない(が、これは大きい問題ではないと考えられる)。
 
 #### move関数による明示的な所有権の移行
 
@@ -109,7 +109,7 @@ forumの例を見てみる。配列を保持している`struct`のイニシャ�
 ```swift
 struct SortedArray {
     var values: [String]
-    
+
     init(values: [String]) {
         self.values = values
         // valuesがソートされていることを保証する
@@ -125,7 +125,7 @@ struct SortedArray {
 ```swift
 struct SortedArray {
     var values: [String]
-    
+
     init(values: [String]) {
         // valuesの参照をselfに移動させることでvaluesの参照が唯一であることを保証する
         self.values = move(values)
@@ -164,8 +164,8 @@ struct SortedArray {
 
 関数に引数を渡す際に、
 
-呼び出し元(caller)がその引数の値を呼び出し先(callee)に貸し出し、呼び出し先(callee)は一時的に所有権を引き受けて、呼び出し先(callee)がリターンする際に、所有権が呼び出し元(caller)に戻る
-呼び出し先(callee)に、呼び出し元(caller)の値の所有権を譲渡する。呼び出し先(callee)では使用後にそれを解放するか、他に所有権をさらに転送する責任を与えることができる
+- 呼び出し元(caller)がその引数の値を呼び出し先(callee)に貸し出し、呼び出し先(callee)は一時的に所有権を引き受けて、呼び出し先(callee)がリターンする際に所有権が呼び出し元(caller)に戻る
+- 呼び出し先(callee)に、呼び出し元(caller)の値の所有権を譲渡する。呼び出し先(callee)では使用後にそれを解放するか、他に所有権をさらに転送する責任を持つ
 例えば、`Array`の`append`は既存のデータ構造に値を挿入するだけなので、`consuming`をつける
 
 ```swift
@@ -179,7 +179,7 @@ extension Array {
 ```swift
 struct Foo {
     var bars: [Bar]
-    
+
     // nameはlogにしか使われていない。
     // そのため、nonconsumingにすることでcaller側のretainを防ぐ
     init(bars: [Bar], name: nonconsuming String) {
@@ -234,7 +234,7 @@ foo.set_x(foo_x)
 ```swift
 struct Foo {
     private var _x: [Int]
-    
+
     var x: [Int] {
         read { yield _x }
         modify { yield &_x }
@@ -243,8 +243,8 @@ struct Foo {
 ```
 
 通常の関数は戻り値を一度返すと処理の実行が終わるため、戻り値の値は引数とは別で所有権を持たなければならない。  
-一方で、コルーチンは、コルーチンが完了して結果を生成した後も実行を継続し、引数は存続し続ける。そのため、コピーなしに生成された値にアクセスすることができ、オーバーヘッドなしに格納プロパティのインプレースで変更をプロパティや`subscript`に行うことができるようになる。  
-内部では、`_read`と`_modify`で既に実装されている。これを`public`でつかえるようにする。
+一方で、コルーチンは、コルーチンが完了して結果を生成した後も実行を継続し、引数は存続し続ける。そのため、コピーなしに生成された値にアクセスすることができ、オーバーヘッドなしに格納プロパティのインプレースの変更をプロパティや`subscript`に行うことができるようになる。  
+内部では、`_read`と`_modify`で既に実装されている。これを正式に使えるようにする。
 
 関連スレッド: https://forums.swift.org/t/modify-accessors/31872
 
@@ -272,7 +272,7 @@ func borrowAndModify(first: C, second: inout C) {}
 func foo(x: @noImplicitCopy C) {
     // OK. nonconsumingなので同じ値を複数回貸し出している
     borrowTwice(first: x, second: x)
-    
+
     // 引数の両方でconsumeしたいかつxはその後も使用し続けたいため、通常は2回コピーが必要。
     // そのためエラーが発生する
     consumeTwice(first: x, second: x) // ❌　error: copies x, which is marked noImplicitCopy
@@ -310,7 +310,7 @@ func foo(x: @noImplicitCopy C) {
 func foo(x: Int, y: Int, z: Int) {
     // 配列をスタックに割り当てたい
     let xyz = [x, y, z]
-    
+
     // しかし、これは引数はエスケープされる可能性があるように見える
     print(xyz)
 }
@@ -335,7 +335,7 @@ withUnsafePointer(to: x) { p in
 
 ##### 背景
 
-ネストしたプロパティに値を代入したい場合、共有可変状態のグローバル変数やクラスインスタンスはどこからでも変更が可能であるために、ローカル関数内での変更と外側での変更を独立させるために、ローカル変数に代入する際にコピーが発生する。値型でも、同じスコープ内で複数回変更が派生する場合はそれぞれの値バインディング時にコピーが発生する。
+深い(ネストした)オブジェクトグラフを利用している場合、そのグラフ内で深くネストしているプロパティロにローカル変数を割り当てたいと思うことは当然ある:
 
 ```swift
 let greatAunt = mother.father.sister
@@ -343,14 +343,16 @@ greatAunt.sayHello()
 greatAunt.sayGoodbye()
 ```
 
+しかし、グローバル変数やクラスインスタンスのような共有された可変状態のオブジェクトの場合、このローカル変数のバインディングはオブジェクトから取り出した値のコピーが必須になる。上記の`mother`や`mother.father`は同じオブジェクトを参照しているプログラムのどこからでも変更が可能であるため、`mother.father.sister`の値は、ローカル関数内の外側からオブジェクトグラフの変更から独立させるために、ローカル変数`greatAunt`にコピーさせなければならない。値型であっても、同じスコープ内で複数回変更が発生する場合は、その時点での値を保存するために、それぞれの値バインディング時に強制的にコピーが発生する。
+
 ##### 改善
 
-そこで、オブジェクトグラフを参照している変数の存続期間中、オブジェクトグラフ内の値をインプレースで共有できるようにするために、バインディングがアクティブな間はこのような変更を防止したい場合がある。これを行うには、コピーせずにその場の値にバインドする新しい種類のローカル変数バインディングを導入し、その場で値にアクセスするために必要なオブジェクトの借用を表明する。
+そこで、そのオブジェクトグラフを参照している変数の存続している間は、オブジェクトグラフ内の値をインプレースで共有できるようにするために、そのバインディングがアクティブな間は、このような変更(コピー)が起きないようにしたい。これを行うには、コピーせずにインプレースで値にバインドする新しい種類のローカル変数バインディングを導入し、インプレースで値にアクセスするために必要なオブジェクトの借用をアサートする。
 
 ```swift
-// 参照を生成することで、借用した一連の値の変更を防ぐ
-// 右辺が計算プロパティなどが関わると技術的に参照はできない
-ref greatAunt = mother.father.sister // refは仮
+// 参照を生成して借用した値の変更を防ぐ
+// 右辺に計算プロパティなどが関わると参照できない
+ref greatAunt = mother.father.sister // refは仮の名前
 
 greatAunt.sayHello()
 mother.father.sister = otherGreatAunt // ❌　エラー。 greatAuntを借用している間は、mother.father.sisterを変更できない
@@ -360,30 +362,31 @@ greatAunt.sayGoodbye()
 クラスインスタンスのプロパティを関数の引数に渡す場合も、呼び出し先でオブジェクトグラフの共有状態が変更される可能性があるため、コピーが発生する。これも借用変数で回避できる。
 
 ```swift
-print(mother.father.sister) // mother.father.sisterはコピーが発生する
+print(mother.father.sister) // mother.father.sisterのコピーが発生する
 
 ref greatAunt = mother.father.sister
 print(greatAunt) // 既に借用済みなのでコピーは発生しない
 ```
 
-オブジェクトグラフの一部を複数回の変更する際、何度も内部の値にアクセスするために`get`/`set`や`read`/`modify`が呼ばれるため効率が悪い。
+また、一度のアクセスでオブジェクトグラフの一部への変更を複数回行うことができるのが望ましい。例えば、
 
 ```swift
 mother.father.sister.name = "Grace"
 mother.father.sister.age = 115
 ```
 
-そこでローカル変数を借用することで、その変数のスコープ内での排他的な変更をアサーションして、インプレースで変更することができる。
+これは繰り返し記載が必要というだけではなく、内部の値にアクセスする度に`get`/`set`や`read`/`modify`が呼ばれるため効率が悪い。操作間で共有状態の変更が入る可能性があるため、`mather`、`mother.father`、`mother.father.sister`の順にアクセスするシーケンスを2回繰り替えされなければならない。
+
+上記のように、変数のスコープに対して変更されている値への排他的アクセスをアサートするローカル変数を作成し、アクセスシーケンスを繰り返さずにインプレースで変更できるようにする。
 
 ```swift
-
-inout greatAunt = &mother.father.sister // inoutは仮
+inout greatAunt = &mother.father.sister // inoutは仮の名前
 greatAunt.name = "Grace"
 mother.father.sister = otherGreatAunt // ❌ エラー。greatAuntが排他的に借用されている間はmother.father.sisterにアクセスできない
 greatAunt.age = 115
 ```
 
-他にも現在の`inout`が現在使えない箇所も拡張して使用可能にしたい。例えば、`enum`内の`switch`文で自身を更新できる。
+他にも現在の`inout`が現在使えない箇所も拡張して使用可能にしたい。例えば、`enum`内の`switch`文で自身を更新できるようにしたい。
 
 ```swift
 enum ZeroOneOrMany<T> {
@@ -424,14 +427,14 @@ move-only型はARCのオーバーヘッドなしにユニークにリソース�
 ```swift
 struct BufferView<Element> {
     // no public initializers
-    
+
     subscript(i: Int) -> Element { read modify }
-    
+
     subscript<Range: RangeExpression>(range: Range) -> BufferView<Element> {
         @nonescaping read
         @nonescaping modify
     }
-    
+
     var count: Int { get }
 }
 
@@ -446,10 +449,10 @@ var lastSummedBuffer: BufferView<Int>?
 
 func sum(buffer: @nonescaping BufferView<Int>) -> Int {
     var value = 0
-    
+
     // ❌  エラー bufferはスコープからエスケープできない
     lastSummedBuffer = buffer
-    
+
     // Move-only型によってBufferViewをSequenceに準拠させることができるかもしれない
     // それまではindex使ってループする必要がある
     for i in 0...buffer.count {
