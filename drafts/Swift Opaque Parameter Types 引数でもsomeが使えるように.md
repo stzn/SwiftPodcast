@@ -17,7 +17,7 @@
 
 ## 概要
 
-Swiftのジェネリクス構文は、複雑な制約を表現できるように設計されているものの、シンプルな制約を設定したい場合、この制約の指定方法は必要以上に宣言が複雑になってしまう。今回Opaque Result Typeのシンタックスを拡張してこの複雑さを減らす。Swift5.7で導入予定。
+Swiftのジェネリクス構文は、複雑な制約を表現できるように設計されているものの、シンプルな制約を設定したい場合、この制約の指定方法は必要以上に宣言が複雑になってしまう。今回Opaque Result Typeの構文を拡張してこの複雑さを減らす。Swift5.7で導入予定。
 
 ## 内容
 
@@ -47,28 +47,30 @@ eagerConcatenate([1: "Hello", 2: "World"], [(3, "Swift"), (4, "!")]) // ⭕️ [
 eagerConcatenate([1, 2, 3], ["Hello", "World"]) // ❌ [Int]と[String]は違う
 ```
 
-一方でこのような複雑な制約が不要な場合、このシンタックスはとても負担に感じる。例えば、SwiftUIの2つのViewを水平に組み合わせる処理を考える:
+一方でこのような複雑な制約が不要な場合、この構文はとても負担に感じる。例えば、SwiftUIの2つのViewを水平に組み合わせる処理を考える:
+
+```swift
+func horizontal<V1: View, V2: View>(_ v1: V1, _ v2: V2) -> some View {
+  HStack {
+    v1
+    v2
+  }
+}
+```
+
+一度しか使われていないジェネリックパラメータの`V1`と`V2`を宣言するのに多くのボイラープレートが必要で、実態以上に複雑に見える。
+
+戻り値は[Opaque Result Types](https://github.com/apple/swift-evolution/blob/main/proposals/0244-opaque-result-types.md)を使うことができるので、戻り値特定の型を隠すことができる。  
+Opaque Result Typesについては以前取り上げている  
+[Swift Opaque Result Typeの拡張と戻り値の新しい書き方](../episodes/Swift%20Opaque%20Result%20Typeの拡張と戻り値の新しい書き方.md)
+
+### 解決策
+
+Opaque result typeの構文をジェネリックな関数の引数でも使えるようにする(ジェネリックパラメータを用いたボイラープレートはいらなくなる)。
 
 ```swift
 
 func horizontal(_ v1: some View, _ v2: some View) -> some View {
-    HStack {
-        v1
-        v2
-    }
-}
-```
-
-### 解決策
-
-一度しか使われていないジェネリックパラメータの`V1`と`V2`を宣言するだけなのに多くのボイラープレートが必要で、実態以上に複雑に見える。
-
-一方で戻り値は[Opaque Result Types](https://github.com/apple/swift-evolution/blob/main/proposals/0244-opaque-result-types.md)を使うことができるので、戻り値特定の型を隠すことができる。
-
-このプロポーザルでは、opaque result typeのシンタックスをジェネリックな関数の引数でも使えるようにする(ジェネリックパラメータを用いたボイラープレートはいらなくなる)。
-
-```swift
-func horizontal<V1: View, V2: View>(_ v1: V1, _ v2: V2) -> some View {
   HStack {
     v1
     v2
@@ -88,7 +90,7 @@ func f(_ p: some P) { }
 func f<_T: P>(_ p: _T)
 ```
 
-注意が必要な点は、このopaque typeの型は型推論を通して**呼び出し元**で決められる。(逆に戻り値に`some`キーワードを使うと、**呼び出し先(実装側)**で決められる。)
+注意が必要な点は、このopaque typeの型は型推論を通して**呼び出し元**で決められる。逆に戻り値に`some`キーワードを使うと、**呼び出し先(実装側)**で決められる。
 
 ```swift
 f(17)      // ⭕️ opaque typeはInt
@@ -114,7 +116,7 @@ func encodeAnyDictionaryOfPairs<_T1: Hashable & Codable, _T2: Codable, _T3: Coda
 
 ### 詳細
 
-Opaque parameter typeは関数、イニシャライザ、subscript宣言の引数のみ使える。タイプエイリアスや関数型の引数には使えない。
+Opaque parameter typeは関数、イニシャライザ、subscript宣言の引数のみ使える。タイプエイリアスや関数型の引数には使えない。この議論については[関数型の「消費」ポジションのOpaque parameter](#関数型の消費ポジションのopaque-parameter)で記載している。
 
 ```swift
 typealias Fn = (some P) -> Void    // ❌ cannot use opaque types in a typealias
@@ -145,7 +147,7 @@ acceptLots("Hello", "Swift", "World") // ⭕️
 acceptLots("Swift", 6)                // ❌  argument for `some P` could be either String or Int
 ```
 
-可変個ジェネリクスが導入されると、このシンタックスは暗黙のジェネリックパラメータを一つのジェネリックパラメータのパックとする。
+可変個ジェネリクスが導入されると、この構文は暗黙のジェネリックパラメータを一つのジェネリックパラメータのパックとする。
 
 ```swift
 func acceptLots<_Ts: P...>(_: _Ts...)
@@ -161,7 +163,7 @@ acceptLots(Swift, 6)                  // ⭕️ Ts StringとInt型を含む
 
 #### 関数型の「消費」ポジションのOpaque parameter
 
-※ 関数型の「消費」ポジションとは、渡した先で値を代入する位置
+※ 関数型の「消費」ポジションとは、渡した先で値を代入する位置を指す。関数型引数の引数や関数型の戻り値の引数など。呼び出し元が指定した型を呼び出し先で値を設定して利用する、呼び出し先が戻り値で指定した型を呼び出し元で値を設定して利用する。
 
 [SE-0328](https://github.com/apple/swift-evolution/blob/main/proposals/0328-structural-opaque-result-types.md)で戻り値の関数型の「消費」ポジションのOpaque parameterは禁止された。
 
@@ -186,13 +188,13 @@ func g(fn: (some P) -> Void) { ... } // ❌ cannot use opaque type in parameter 
 
 #### プロトコルの関連型(associated types)に制約を加える
 
-このプロポーザルは、プロトコルの関連型(associated types)を特定するジェネリックシンタックスで使う場合にも適している。例えば、`Collection<String>` は「Elementが`String`の`Collection`」。このプロポーザルと組み合わせて、もっと簡単に任意の文字列のコレクションを関数の引数に受け取ることができる。
+このプロポーザルの内容はは、プロトコルの関連型(associated types)を特定するジェネリック構文で使えるようにする考えとも上手く組み合う。例えば、`Collection<String>` は「Elementが`String`の`Collection`」。このプロポーザルと組み合わせて、もっと簡単に任意の文字列のコレクションを関数の引数に受け取ることができる。
 
 ```swift
 func takeStrings(_: some Collection<String>) { ... }
 ```
 
-冒頭で例として出した複雑な`eagerConcatenate` も、このopaque parameterとプロトコルのジェネリックシンタックスを使って、一つのジェネリックパラメータを使ってより簡単に表現できる。
+冒頭で例として出した複雑な`eagerConcatenate` も、このopaque parameterとプロトコルのジェネリック構文を使って、一つのジェネリックパラメータを使ってより簡単に表現できる。
 
 ```swift
 func eagerConcatenate<T>(
@@ -208,9 +210,11 @@ func lazyConcatenate<T>(
 ) -> some Sequence<T>
 ```
 
+この構文に関しては[[Pitch 2] Light-weight same-type requirement syntax](https://forums.swift.org/t/pitch-2-light-weight-same-type-requirement-syntax/55081)で話されている。
+
 #### 「消費」ポジションのOpaque typeを使えるようにする
 
-引数でも戻り値でも「消費」ポジションのOpaque typeを禁止しているのは、どちらの場合も呼び出し元と呼び出し先が間違った引数の型を選択してしまい、現在のシンタックスだと役に立たないから。これを「消費」ポジションのOpaque typeの方の選択を「反転」させることで可能にすることができると思われる。これを理解するために、opaque result typesを「リバースジェネリクス」と見なして、関数の`->`の後にジェネリックパラメータのリストが指定できて、呼び出し先が方を選択することができるとする。
+引数でも戻り値でも「消費」ポジションのOpaque typeを禁止しているのは、どちらの場合も呼び出し元と呼び出し先が間違った引数の型を選択してしまい、現在の構文だと役に立たないから。これを「消費」ポジションのOpaque typeの方の選択を「反転」させることで可能にすることができると思われる。これを理解するために、opaque result typesを「リバースジェネリクス」と見なして、関数の`->`の後にジェネリックパラメータのリストが指定できて、呼び出し先が方を選択することができるとする。
 
 ```swift
 func f1() -> some P { ... }
@@ -276,7 +280,7 @@ g2 { x in x.doSomethingSpecifiedInP() }
 - [[Pitch] Opaque parameter types](https://forums.swift.org/t/pitch-opaque-parameter-types/54914)
 - [SE0341: Opaque Parameter Declarations](https://forums.swift.org/t/se0341-opaque-parameter-declarations/55082)
 - [[Accepted with Modifications] SE-0341: Opaque Parameters](https://forums.swift.org/t/accepted-with-modifications-se-0341-opaque-parameters/55397)
-
+- [[Pitch 2] Light-weight same-type requirement syntax](https://forums.swift.org/t/pitch-2-light-weight-same-type-requirement-syntax/55081)で話されている。
 
 ### プロポーザルドキュメント
 
