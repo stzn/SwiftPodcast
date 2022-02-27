@@ -5,9 +5,9 @@
   - [内容](#内容)
     - [問題点](#問題点)
     - [解決策](#解決策)
-    - [詳細](#詳細)
-      - [可変個ジェネリクス(Variadic generics)](#可変個ジェネリクスvariadic-generics)
+    - [詳細(現状使えない場所)](#詳細現状使えない場所)
       - [関数型の「消費」ポジションのOpaque parameter](#関数型の消費ポジションのopaque-parameter)
+      - [可変個ジェネリクス(Variadic generics)](#可変個ジェネリクスvariadic-generics)
     - [将来的な検討事項](#将来的な検討事項)
       - [プロトコルの関連型(associated types)に制約を加える](#プロトコルの関連型associated-typesに制約を加える)
       - [「消費」ポジションのOpaque typeを使えるようにする](#消費ポジションのopaque-typeを使えるようにする)
@@ -114,13 +114,34 @@ func encodeAnyDictionaryOfPairs(_ dict: [some Hashable & Codable: Pair<some Coda
 func encodeAnyDictionaryOfPairs<_T1: Hashable & Codable, _T2: Codable, _T3: Codable>(_ dict: [_T1: Pair<_T2, _T3>]) -> Data
 ```
 
-### 詳細
+### 詳細(現状使えない場所)
 
-Opaque parameter typeは関数、イニシャライザ、subscript宣言の引数のみ使える。タイプエイリアスや関数型の引数には使えない。この議論については[関数型の「消費」ポジションのOpaque parameter](#関数型の消費ポジションのopaque-parameter)で記載している。
+#### 関数型の「消費」ポジションのOpaque parameter
+
+Opaque parameter typeは関数、イニシャライザ、subscript宣言の引数のみに使える。タイプエイリアスや関数型の引数には使えない(関数型の「消費」ポジションと呼ばれている)。
 
 ```swift
 typealias Fn = (some P) -> Void    // ❌ cannot use opaque types in a typealias
 let g: (some P) -> Void = f        // ❌ cannot use opaque types in a value of function type
+```
+
+[SE-0328](https://github.com/apple/swift-evolution/blob/main/proposals/0328-structural-opaque-result-types.md)で戻り値の関数型の「消費」ポジションのOpaque parameterは禁止された。
+
+```swift
+func f() -> (some P) -> Void { ... } // ❌ cannot use opaque type in parameter of function type
+```
+
+これは、呼び出し元がこの未知の匿名の型の値を生成する簡単な方法が存在しないため、`f`を使うのがとても難しい。
+
+```swift
+let fn = f()
+fn(/* どの型の値を渡せばよいのか？ */)
+```
+
+同じことが関数型のパラメータの中のOpaque typeも適用される。
+
+```swift
+func g(fn: (some P) -> Void) { ... } // ❌ cannot use opaque type in parameter of function type
 ```
 
 #### 可変個ジェネリクス(Variadic generics)
@@ -139,7 +160,7 @@ func acceptLots(_: some P...)
 func acceptLots<_T: P>(_: _T...)
 ```
 
-この関数は一つの型して受け入れられない。
+この関数は一つの型しか受け入れられない。
 
 ```swift
 acceptLots(1, 1, 2, 3, 5, 8)          // ⭕️
@@ -161,34 +182,11 @@ acceptLots("Hello", "Swift", "World") // ⭕️ Ts 3個のString型を含む
 acceptLots(Swift, 6)                  // ⭕️ Ts StringとInt型を含む
 ```
 
-#### 関数型の「消費」ポジションのOpaque parameter
-
-※ 関数型の「消費」ポジションとは、渡した先で値を代入する位置を指す。関数型引数の引数や関数型の戻り値の引数など。呼び出し元が指定した型を呼び出し先で値を設定して利用する、呼び出し先が戻り値で指定した型を呼び出し元で値を設定して利用する。
-
-[SE-0328](https://github.com/apple/swift-evolution/blob/main/proposals/0328-structural-opaque-result-types.md)で戻り値の関数型の「消費」ポジションのOpaque parameterは禁止された。
-
-```swift
-func f() -> (some P) -> Void { ... } // ❌ cannot use opaque type in parameter of function type
-```
-
-これは、呼び出し元がこの未知の匿名の型の値を生成する簡単な方法が存在しないため、`f`を使うのがとても難しい。
-
-```swift
-let fn = f()
-fn(/* どの型の値を渡せばよいのか？ */)
-```
-
-同じことが関数型のパラメータの中のOpaque typeも適用される。
-
-```swift
-func g(fn: (some P) -> Void) { ... } // ❌ cannot use opaque type in parameter of function type
-```
-
 ### 将来的な検討事項
 
 #### プロトコルの関連型(associated types)に制約を加える
 
-このプロポーザルの内容はは、プロトコルの関連型(associated types)を特定するジェネリック構文で使えるようにする考えとも上手く組み合う。例えば、`Collection<String>` は「Elementが`String`の`Collection`」。このプロポーザルと組み合わせて、もっと簡単に任意の文字列のコレクションを関数の引数に受け取ることができる。
+このプロポーザルの内容は、プロトコルの関連型(associated types)を特定するジェネリック構文で使えるようにする考えとも上手く組み合う。例えば、`Collection<String>` は「Elementが`String`の`Collection`」。このプロポーザルと組み合わせて、もっと簡単に任意の文字列のコレクションを関数の引数に受け取ることができる。
 
 ```swift
 func takeStrings(_: some Collection<String>) { ... }
