@@ -1,6 +1,6 @@
-# Swift そのasync関数はどのExecutorで動く?
+# Swift そのasync関数はどこで動く?
 
-- [Swift そのasync関数はどのExecutorで動く?](#swift-そのasync関数はどのexecutorで動く)
+- [Swift そのasync関数はどこで動く?](#swift-そのasync関数はどこで動く)
   - [用語](#用語)
   - [概要](#概要)
   - [内容](#内容)
