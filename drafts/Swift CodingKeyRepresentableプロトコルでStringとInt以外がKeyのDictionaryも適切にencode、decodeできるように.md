@@ -1,6 +1,6 @@
-# Swift CodingKeyRepresentableプロトコルでStringとInt以外がKeyのDictionaryも適切にencode、decodeできるように
+# Swift CodingKeyRepresentableプロトコルでStringとInt以外がKeyのDictionaryも適切にエンコード、デコードできるように
 
-- [Swift CodingKeyRepresentableプロトコルでStringとInt以外がKeyのDictionaryも適切にencode、decodeできるように](#swift-codingkeyrepresentableプロトコルでstringとint以外がkeyのdictionaryも適切にencodedecodeできるように)
+- [Swift CodingKeyRepresentableプロトコルでStringとInt以外がKeyのDictionaryも適切にエンコード、デコードできるように](#swift-codingkeyrepresentableプロトコルでstringとint以外がkeyのdictionaryも適切にエンコードデコードできるように)
   - [概要](#概要)
   - [内容](#内容)
     - [問題点](#問題点)
@@ -9,8 +9,8 @@
       - [例:](#例)
         - [RawValueがStringのenum](#rawvalueがstringのenum)
         - [独自のstruct](#独自のstruct)
-      - [`CodingKeyRepresentable`に準拠した型の`Dictionary`へのencode](#codingkeyrepresentableに準拠した型のdictionaryへのencode)
-      - [`CodingKeyRepresentable`に準拠した型の`Dictionary`からのdecode](#codingkeyrepresentableに準拠した型のdictionaryからのdecode)
+      - [CodingKeyRepresentableに準拠した型のDictionaryへのエンコードの実装](#codingkeyrepresentableに準拠した型のdictionaryへのエンコードの実装)
+      - [CodingKeyRepresentableに準拠した型のDictionaryからのデコードの実装](#codingkeyrepresentableに準拠した型のdictionaryからのデコードの実装)
       - [RawValueがStringまたはIntのRawRepresentableのCodingKeyRepresentableにはデフォルト実装を提供](#rawvalueがstringまたはintのrawrepresentableのcodingkeyrepresentableにはデフォルト実装を提供)
       - [内部型の_DictionaryCodingKeyが失敗しないイニシャライザを持つように変更](#内部型の_dictionarycodingkeyが失敗しないイニシャライザを持つように変更)
     - [既存のコードへの影響](#既存のコードへの影響)
@@ -18,7 +18,7 @@
       - [標準ライブラリの型をCodingKeyRepresentableに準拠させる](#標準ライブラリの型をcodingkeyrepresentableに準拠させる)
       - [標準ライブラリにAnyCodingKey型を追加](#標準ライブラリにanycodingkey型を追加)
     - [今回採用されなかった案](#今回採用されなかった案)
-      - [なぜ単に型を`CodingKey`に直接準拠させないのか？](#なぜ単に型をcodingkeyに直接準拠させないのか)
+      - [なぜ既存のCodingKeyを変更(デフォルト実装を追加)して単に型をCodingKeyに直接準拠させないのか？](#なぜ既存のcodingkeyを変更デフォルト実装を追加して単に型をcodingkeyに直接準拠させないのか)
       - [なぜRawRepresentableを見直したり、RawRepresentable where RawValue == CodingKey制約を使わない？](#なぜrawrepresentableを見直したりrawrepresentable-where-rawvalue--codingkey制約を使わない)
       - [なぜCodingKeyのassociated typeを使わない？](#なぜcodingkeyのassociated-typeを使わない)
       - [Encoder/Decoderにワークアラウンドを追加する](#encoderdecoderにワークアラウンドを追加する)
@@ -37,7 +37,7 @@ Codableを使ってプレーンな`String`や`Int`以外の型を`Dictionary`の
 
 ### 問題点
 
-例えば、下記のような`RawValue`が`String`のenumをDictionaryのKeyタイプに指定すると`JSONEncoder`でencodeするとキーバリューのペア(`KeyedContainer`)ではなく配列(`UnkeyedContainer`)になり、`JSONDecoder`でdecodeするとエラーになる。
+例えば、下記のような`RawValue`が`String`の`enum`を`Dictionary`のキーに指定して`JSONEncoder`でエンコードするとキーバリューのペア(`KeyedContainer`)ではなく配列(`UnkeyedContainer`)になり、`JSONDecoder`でデコードするとエラーになる。
 
 ```swift
 
@@ -57,12 +57,12 @@ do {
 }
 ```
 
-①encode結果
+①エンコード結果
 ```swift
 [ "key", value ]
 ```
 
-②decode結果
+②デコード結果
 ```swift
 typeMismatch(Swift.Array<Any>, Swift.DecodingError.Context(codingPath: [], debugDescription: "Expected to decode Array<Any> but found a dictionary instead.", underlyingError: nil))
 ```
@@ -74,21 +74,21 @@ typeMismatch(Swift.Array<Any>, Swift.DecodingError.Context(codingPath: [], debug
 
 をキーとして使用した場合に多くの人が混乱している。
 
-しかし、これに修正を加えることは
+しかし、既存の実装に修正を加えると
 
 1. これまでの動作を破壊してしまい、後方互換性に影響がある(新しいコードは過去のコードをでコードできない、逆も同様)。
 2. この動作は標準ライブラリと結びついているので、OSのバージョンによって動作が異なる。
 
 
-そこで新しく`CodingKeyRepresentable`というプロトコルを提供し、これに準拠した型をDictionaryのKeyとして使用することで、`KeyedContainer`としてencode/decodeできるようにする。
+そこで新しく`CodingKeyRepresentable`というプロトコルを提供し、これに準拠した型を`Dictionary`のキーとして使用することで、`KeyedContainer`としてエンコード/デコードできるようにする。
 
 ### 解決方法
 
 #### `CodingKeyRepresentable`
 
-`CodingKeyRepresentable`に準拠した型は`CodingKey`として利用できることを示し、`KeyedContainer`にencodeするためにそれらで定義された`CodingKey`を`Dictionary`にオプトインで使用することができる。
+`CodingKeyRepresentable`に準拠した型は`CodingKey`として利用できることを示し、`KeyedContainer`にエンコードするためにそれらで定義された`CodingKey`を`Dictionary`にオプトインで使用することができる。
 
-このオプトインが発生するのは、`CodingKeyRepresentable`プロトコルが使用できるSwiftのバージョンのみで、プロトコルの使用者は完全にコントロールできる。例えば、今独自のワークアラウンドを入れいても、将来このプロトコルが使用できるSwiftのバージョンのみをサポートした場合は、ワークアラウンドを無視してこの動作に頼ることができる。
+このオプトイン(分岐処理)が発生するのは、`CodingKeyRepresentable`プロトコルが使用できるSwiftのバージョンのみなので、このプロトコルの利用者は状況に応じた対応ができる。例えば、今独自のワークアラウンドを入れいても、将来このプロトコルが使用できるSwiftのバージョンのみをサポートした場合は、ワークアラウンドを無視してこの動作に頼ることができる。
 
 ```swift
 /// A type that can be converted to and from a coding key.
@@ -133,18 +133,17 @@ do {
 }
 ```
 
-①decode結果
+①デコード結果
 ```swift
 [main.Key.key: "value"]
 ```
 
-②encode結果
+②エンコード結果
 ```swift
 {"key":"value"}
 ```
 
 ##### 独自のstruct
-
 
 ```swift
 // 標準ライブラリの_DictionaryCodingKeyと同じ
@@ -163,7 +162,7 @@ struct _AnyCodingKey: CodingKey {
     }
 }
 
-struct ID: Hashable, CodingKeyRepresentable {
+struct ID: Hashable, CodingKeyRepresentable, Codable {
     static let knownID1 = ID(stringValue: "<some-identifier-1>")
     static let knownID2 = ID(stringValue: "<some-identifier-2>")
 
@@ -196,9 +195,19 @@ try String(data: encoder.encode(data), encoding: .utf8)
     "<some-identifier-2>": "...",
 }
 */
+
+let decoder = JSONDecoder()
+try decoder.decode([ID: String].self, from: encoder.encode(data))
+
+/
+[
+    main.ID(stringValue: "<some-identifier-1>"): "...",
+    main.ID(stringValue: "<some-identifier-2>"): "..."
+]
+*/
 ```
 
-#### `CodingKeyRepresentable`に準拠した型の`Dictionary`へのencode
+#### CodingKeyRepresentableに準拠した型のDictionaryへのエンコードの実装
 
 ```swift
 } else if #available(SwiftStdlib 5.6, *), 
@@ -218,7 +227,7 @@ try String(data: encoder.encode(data), encoding: .utf8)
 https://github.com/apple/swift/blob/4f7f9f5e615f815800d2c802d6daa39c5e5cf9a2/stdlib/public/core/Codable.swift#L5630
 
 
-#### `CodingKeyRepresentable`に準拠した型の`Dictionary`からのdecode
+#### CodingKeyRepresentableに準拠した型のDictionaryからのデコードの実装
 
 ```swift
 } else if #available(SwiftStdlib 5.6, *),
@@ -247,7 +256,7 @@ https://github.com/apple/swift/blob/4f7f9f5e615f815800d2c802d6daa39c5e5cf9a2/std
 
 #### RawValueがStringまたはIntのRawRepresentableのCodingKeyRepresentableにはデフォルト実装を提供
 
-このプロポーザルの多くのユースケースで、`CodingKeyRepresentable`に準拠している型は(`RawValue`が`String`または`Int`)の`RawRepresentable`に既に準拠している。そこで、これらのケースで不一致を避けるために、`RawValue`が`String`または`Int`の場合の`RawRepresentable`のデフォルト実装を提供する。
+このプロポーザルの多くのユースケースで、`CodingKeyRepresentable`に準拠している型は(`RawValue`が`String`または`Int`の)`RawRepresentable`に既に準拠している。そこで、これらのケースで独自実装によって起こる不一致を避けるために、`RawValue`が`String`または`Int`の場合の`RawRepresentable`にデフォルト実装を提供する。
 
 ```swift
 @available(SwiftStdlib 5.6, *)
@@ -276,9 +285,9 @@ extension RawRepresentable where Self: CodingKeyRepresentable, RawValue == Int {
     @available(SwiftStdlib 5.6, *)
     public init?<T: CodingKey>(codingKey: T) {
         if let intValue = codingKey.intValue {
-        self.init(rawValue: intValue)
+            self.init(rawValue: intValue)
         } else {
-        return nil
+            return nil
         }
     }
 }
@@ -289,13 +298,13 @@ https://github.com/apple/swift/blob/4f7f9f5e615f815800d2c802d6daa39c5e5cf9a2/std
 例えば、下記のように使用できる
 
 ```swift
-// StringWrapperはRawValue == StringなRawRepresentableに既に準拠している
+// StringWrapperはRawValue == StringなRawRepresentableに既に準拠しているとする
 extension StringWrapper: CodingKeyRepresentable {}
 ```
 
 #### 内部型の_DictionaryCodingKeyが失敗しないイニシャライザを持つように変更
 
-これは実際失敗することがなく、不要なOptionalバイディングを減らすことができる.
+これは実際失敗することがなく、不要なオプショナルバイディングを減らすことができる.
 
 ```swift
 /// A wrapper for dictionary keys which are Strings or Ints.
@@ -324,9 +333,9 @@ https://github.com/apple/swift/blob/4f7f9f5e615f815800d2c802d6daa39c5e5cf9a2/std
 
 ### 既存のコードへの影響
 
-直接はない。
+このプロトコルを取り入れることは追加なので直接は影響がない。
 
-しかし、プロトコルを`CodingKeyRepresentable`に準拠させようとする場合は、注意が必要。なぜなら、これまで`Dictionary`のキーとしてencodeされていた任意の`T`型が準拠すると、後方互換性が保てなくなる可能性がある、新しい型が`CodingKeyRepresentable`に準拠する場合や`Codable`に新しく準拠する型の場合は安全。
+しかし、プロトコルを`CodingKeyRepresentable`に取り入れる場合は注意が必要。なぜなら、これまで`Dictionary`のキーとしてエンコードされていた任意の`T`型に取り入れた場合、アーカイブとの後方互換性が保てなくなる可能性がある。新しい型が`CodingKeyRepresentable`の場合や既存の型が`Codable`に新しく準拠する場合は安全。
 
 ### その他の検討事項
 
@@ -336,24 +345,34 @@ https://github.com/apple/swift/blob/4f7f9f5e615f815800d2c802d6daa39c5e5cf9a2/std
 
 #### 標準ライブラリにAnyCodingKey型を追加
 
-`CodingKeyRepresentable`に準拠する型は`CodingKey`を提供する必要があるので、型の内容から自動で生成できる可能性は高い。これは、初期化時にの任意の`String`または`Int`をとることができる一般的なキー型を紹介する良い機会かもしれない。
+`CodingKeyRepresentable`に準拠する型は`CodingKey`を提供する必要があるので、型の内容から自動で生成できる可能性は高い。これは、初期化時に任意の`String`または`Int`を受け取ることができる一般的なキー型を導入する良い機会かもしれない。
 
-`Dictionary`は既に内部で`_DictionaryCodingKey`を使用している(`JSONEncoder`/`JSONDecoder`には`_JSONKey`、, `PropertyListEncoder`/`PropertyListDecoder`には`_PlistKey`)。そのため、生成することは有用かもしれない。この型の実装は上記で示した`_AnyCodingKey`と同じになる。
+`Dictionary`は既に内部で`_DictionaryCodingKey`を使用している(`JSONEncoder`/`JSONDecoder`には`_JSONKey`、, `PropertyListEncoder`/`PropertyListDecoder`には`_PlistKey`)。そのため、これを汎用化することは役に立つかもしれないと考える。この型の実装は上記で示した`_AnyCodingKey`と同じになる。
 
 ### 今回採用されなかった案
 
-#### なぜ単に型を`CodingKey`に直接準拠させないのか？
+#### なぜ既存のCodingKeyを変更(デフォルト実装を追加)して単に型をCodingKeyに直接準拠させないのか？
+
+2つの理由がある。
 
 1. `CodingKey`に既に準拠している場合に、希に動作を変えてしまうリスクがある
-2. `CodingKey`の`stringValue`と`intValue`プロパティを露出させる必要があるが、これはencode/decode時にのみ適切。勝手にこれを外部に露出させるのは適切でないと思われる。
+2. `CodingKey`の`stringValue`と`intValue`プロパティを露出させる必要があるが、これはエンコード/デコード時にのみ適切。勝手にこれを外部に露出させるのは適切でないと思われる。
+
+https://forums.swift.org/t/codingkeypath-add-support-for-encoding-and-decoding-nested-objects-with-dot-notation/34710/16
+
+https://forums.swift.org/t/codingkeypath-add-support-for-encoding-and-decoding-nested-objects-with-dot-notation/34710/33
 
 #### なぜRawRepresentableを見直したり、RawRepresentable where RawValue == CodingKey制約を使わない？
 
-型が`RawRepresentable`に準拠することは、ソースタイプとその基になる`RawValue`型の間でロスレス変換されることを示す。この変換は、多くの場合、ソースタイプとその基になる表現の間、最も一般的にはraw valueに裏打ちされた`enum`と、同様にraw valueに裏打ちされたoption setの間の「標準」変換である。
+※ ロスレス変換が必要になるような厳密さは不要である
 
-対照的に、`CodingKey`との間の変換は「付属的」なものであり、encodeおよびdecodeプロセス内のみでの表現であることを期待する。`protocol CodingKeyRepresentable: RawRepresentable where RawValue == CodingKey`とした場合に必要とするような、型の標準的な基底表現を`CodingKey`であることを提案（期待）しない。同様に、`CodingKey`以外のraw valueで既に`RawRepresentable`の型は、この方法だと準拠できない。今回の機能の大きな推進力は、`Int`および`String`でバックアップされた`enum`を`Dictionary`のコーディングキーとして参加できるようにすること。
+型が`RawRepresentable`に準拠することは、その対象の型とその基になる`RawValue`型の間でロスレス変換されることを示す。この変換は、多くの場合、対象の型とその基になる表現の間、最も一般的にはraw値を持つ`enum`やオプションセットの間の「標準」変換。
+
+対照的に、`CodingKey`との間の変換は「付属的」なものであり、エンコードおよびデコードプロセス内のみでの表現であることを期待する。`protocol CodingKeyRepresentable: RawRepresentable where RawValue == CodingKey`とした場合に必要とするような、型の標準的な基底表現が`CodingKey`であることを提案（期待）しない。同様に、`CodingKey`以外のraw値で既に`RawRepresentable`の型は、この方法だと準拠できない。今回の機能の大きな推進力は、`Int`および`String`をraw値に持つ`enum`を`Dictionary`の`CodingKey`として参加できるようにすること。
 
 #### なぜCodingKeyのassociated typeを使わない？
+
+※ 型チェックのコストと天秤にかけた場合にメリットが上回らない
 
 <details>
 <summary>詳細を知りたい場合はクリック</summary>
@@ -405,7 +424,7 @@ struct MyCustomType: CodingKeyRepresentable {
 
 この提案の分析は、利用側でキー値を引き出すために型消去を行うためのコストがゼロではなく、そのコストが見合わないことを示唆している。https://forums.swift.org/t/pitch-allow-coding-of-non-string-int-keyed-dictionary-into-a-keyedcontainer/44593/9
 
-associated typeは利用側でゼロではないコストがかかるため(例えば、キーの型を使用して`CodingKeyRepresentable`に準拠しているかをチェックする)、associated typeにそのコストに見合うメリットが必要になる。名前にもかかわらず、`CodingKeyRepresentable`と`RawRepresentable`の主な違いは、`RawValue`型の識別子が`RawRepresentable`にとって重要な一方、`CodingKeyRepresentable`はそうでもない。
+associated typeは利用側でゼロではないコストがかかるため(例えば、キーの型を使用して`CodingKeyRepresentable`に準拠しているかをチェックする)、associated typeにそのコストに見合うメリットが必要になる。名前が`CodingKeyRepresentable`だが、`CodingKeyRepresentable`と`RawRepresentable`の主な違いは、`RawValue`型の識別子が`RawRepresentable`にとって重要な一方、`CodingKeyRepresentable`はそうでもない。
 
 `CodingKeyRepresentable.codingKey`の利用側(例えば、`Dictionary`)では、キー型の識別子が必ずしも十分に役立つとは思えない:
 
@@ -458,7 +477,7 @@ struct MyCustomType: CodingKeyRepresentable {
 
 `DictionaryKeyEncodingStrategy`を`JSONEncoder`に追加しようとしてみた。https://github.com/apple/swift/pull/26257
 
-新しいencode/decodeの「strategy」を提供することにより、`JSONEncoder`および`JSONDecoder`型で新しい動作へのオプトインを直接表現できるようにするというアイデアがあったが、問題は特定の`Encoder`/`Decoder`のペアだけでなく、すべての問題を修正する必要があると思われる。
+新しいエンコード/デコードの「strategy」を提供することにより、`JSONEncoder`および`JSONDecoder`型で新しい動作へのオプトインを直接表現できるようにするというアイデアがあったが、問題は特定の`Encoder`/`Decoder`のペアだけでなく、すべての問題を修正する必要があると思われる。
 
 #### `newtype`の設計を待つ
 
@@ -477,7 +496,7 @@ struct MyCustomType: CodingKeyRepresentable {
 Property Wrapperの解決策のいくつかの欠点は、Pitch段階で発覚した:
 
 - `Int8`(またはその他の標準ライブラリの数値の型)をキーとして使用するには、`CodingKey`に準拠している必要がある。この準拠は、例えばSwift Packageなど他の場所での準拠の衝突を防ぐために、標準ライブラリで行う必要がある。そして私見では、これらの型は`CodingKey`への準拠を提供するべきではない。
-- 単純にencode/decodeするのは簡単ではない。例えば、別の`Codable`型のプロパティではない`Dictionary<Int8, String>`(上記のリンクされた投稿の中の例でも言及されている)。
+- 単純にエンコード/デコードするのは簡単ではない。例えば、別の`Codable`型のプロパティではない`Dictionary<Int8, String>`(上記のリンクされた投稿の中の例でも言及されている)。
 - すでに定義されているオブジェクトに`Codable`への準拠を追加することはできない。したがって、あるファイルに`Dictionary<Int8, String>`を持つstruct(`MyType`)を定義した場合、`extension MyType: Codable {/ * ... * /}`を別のファイルに単純に配置することはできない。
 
 ## 参考リンク
