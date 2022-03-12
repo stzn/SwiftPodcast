@@ -1,5 +1,41 @@
 # Building Better Apps with Value Types in Swift(WWDC2015)
 
+- [Building Better Apps with Value Types in Swift(WWDC2015)](#building-better-apps-with-value-types-in-swiftwwdc2015)
+  - [概要](#概要)
+  - [内容](#内容)
+    - [参照セマンティクス](#参照セマンティクス)
+      - [Cocoa(Touch)とObjective-Cのコピー](#cocoatouchとobjective-cのコピー)
+    - [Immutability(不変性)](#immutability不変性)
+      - [可変を排除する](#可変を排除する)
+      - [Cocoa(Touch)の不変性(コピーが不要なもの)](#cocoatouchの不変性コピーが不要なもの)
+    - [値セマンティクス](#値セマンティクス)
+      - [値型の合成](#値型の合成)
+      - [値型と値は区別される](#値型と値は区別される)
+    - [Temperatureの値セマンティクス版](#temperatureの値セマンティクス版)
+      - [必要な時に可変で、不要な時は不変](#必要な時に可変で不要な時は不変)
+      - [競合状態からの解放](#競合状態からの解放)
+      - [コピーのパフォーマンスは？](#コピーのパフォーマンスは)
+    - [値型の実用例](#値型の実用例)
+      - [Circle](#circle)
+      - [Polygon](#polygon)
+      - [Diagramは両方を含む](#diagramは両方を含む)
+      - [Diagramの作成](#diagramの作成)
+      - [ダイアグラムを使う](#ダイアグラムを使う)
+      - [DiagramをDrawableに準拠させる](#diagramをdrawableに準拠させる)
+    - [値型と参照型を混ぜる](#値型と参照型を混ぜる)
+      - [値型を含んだ参照型](#値型を含んだ参照型)
+      - [参照型を含んだ値型](#参照型を含んだ値型)
+      - [不変の参照は問題なし](#不変の参照は問題なし)
+      - [不変の参照と`Equatable`](#不変の参照とequatable)
+      - [可変オブジェクトへの参照](#可変オブジェクトへの参照)
+      - [Copy-on-write](#copy-on-write)
+      - [Copy-on-writeの活用](#copy-on-writeの活用)
+      - [Polygonからパスを形成する](#polygonからパスを形成する)
+      - [ユニークな参照のSwiftオブジェクト](#ユニークな参照のswiftオブジェクト)
+      - [値型でundoを実装する](#値型でundoを実装する)
+    - [まとめ](#まとめ)
+  - [参考リンク](#参考リンク)
+
 ## 概要
 
 Swiftは強力な構造体を形成する表現豊かな第一級の値型をサポートしている。参照型と値型の違いや、可変性やスレッドセーフといった共通の課題を値型がどのように洗練された方法で解決するかを学ぶ。
@@ -160,11 +196,12 @@ func sieve(numbers: [Int]) -> [Int] {
 </details>
 <br/>
 
-#### Cocoa(Touch)の不変性
+#### Cocoa(Touch)の不変性(コピーが不要なもの)
 
 多くの不変なクラスが存在する:
 
-- `NSDate`, `NSURL`, `UIImage`, `NSNumber`など(安全性が改善されており、これらはコピーが不要)
+- `NSDate`, `NSURL`, `UIImage`, `NSNumber`など
+- 安全性が改善されており、これらはコピーが不要
 
 一方で同様にデメリットもある。Objective-Cではホームディレクトリから初めてパスのコンポーネントを繰り返し追加したい場合、それぞれのイテレーションで新しい`NSURL`を作成しなければならないかもしれない。
 
@@ -212,7 +249,7 @@ print("a = \(a), b = \(b)")  // Prints "a = 17, b = 42"
 #### 値型の合成
 
 - Swiftの「基本的な」型は全て値型(`Int`, `Double`, `String`)
-- Swiftのコレクションを値型(`Array`, `Set`, `Dictionary`)
+- Swiftのコレクションも値型(`Array`, `Set`, `Dictionary`)
 
 値型のみで構成されているstruct、enum、tupleも値型になる。値型の世界で表現豊かな抽象を構築するのはとても簡単。
 
@@ -499,7 +536,13 @@ var image2 = image
 
 ![UIImageを共有した2つのImage](../images/Building%20Better%20Apps%20with%20Value%20Types%20in%20Swift/image_shared_uiimage.png)
 
-`UIImage`は不変なので問題が発生しない。`image`と共有した`UIImage`を変更しても心配はいらない。
+[`UIImage`は不変](#cocoatouchの不変性)なので問題が発生しない。`image`と共有した`UIImage`を変更される心配がない。
+
+```
+Because image objects are immutable, you can’t change their properties after creation. 
+```
+https://developer.apple.com/documentation/uikit/uiimage
+
 
 #### 不変の参照と`Equatable`
 
