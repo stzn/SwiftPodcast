@@ -27,12 +27,7 @@ Swiftのstructは不変(immutable)と呼ばれているが、実際はvarに割�
 
 ### varに割り当てられた場合は変更できるので、不変ではないのでは？
 
-Swiftのstructの場合、**セマンティクス上**(※1)、値の変更時にコピーが発生して元の値へ影響を与えない。これはobservable effect(※2)という観点での話。structの値はその自身の「スコープを超えた範囲(変数への代入、初期化、関数の引数へ渡すなど)」で変更されることはないので不変と言われている。これはstructだけではなく、Swiftの値型(enumなど)に当てはまる。
-
-※1  
-実際はコンパイラが最適化していて、必ず毎回コピーしているわけではなく、インプレースに(メモリの位置を変更せずにその場で)変更されることもある。これは内部の詳細になるので、必ずこうなると推定するべきものではない。将来的に実装が変わる可能性もある。
-
-変更できるように見えるが、**セマンティクス上**は新しいインスタンスを毎回生成している。
+Swiftのstructの場合、**セマンティクス上**(※1)、値の変更時にコピーが発生して元の値へ影響を与えない。これはobservable effect(※2)という観点での話。structの値はその自身の「スコープを超えた範囲(他の変数への代入時、初期化や関数の引数へ渡す場合など)」ではコピーが発生し、元の値が変更されることはないので不変と言われている。これはstructだけではなく、Swiftの値型(enumなど)に当てはまる。
 
 例えば、下記では、`foo.bar.x`のタイミングで"Got a new bar!"が出力されていて、新しい`Bar`が割り当てられていることがわかる。
 
@@ -53,6 +48,9 @@ foo.bar.x = 10
 ```
 
 また、この余計なコピーを防ぐこと明示するためにCOW(copy-on-write)という仕組みが存在している(後述)。
+
+※1  
+実際はコンパイラが最適化していて、必ず毎回コピーしているわけではなく、インプレースに(メモリの位置を変更せずにその場で)変更されることもある。これは内部の詳細になるので、必ずこうなると推定するべきものではない。将来的に実装が変わる可能性もある。
 
 ※2  
 observable effectとは、一般的に「状態の変更」を指す。状態の変更とは例えば下記のようなもの:
@@ -283,4 +281,5 @@ https://www.vadimbulavin.com/value-types-and-reference-types-in-swift/)
 - [SE-0268: Refine didSet Semantics](https://forums.swift.org/t/se-0268-refine-didset-semantics/30049)
 - [Copy-on-Write Representation](https://github.com/apple/swift/blob/main/docs/SIL.rst#copy-on-write-representation)
 - [Understanding Swift Copy-on-Write mechanisms](https://medium.com/@lucianoalmeida1/understanding-swift-copy-on-write-mechanisms-52ac31d68f2f)
+- [Enforce Exclusive Access to Memory](https://github.com/apple/swift-evolution/blob/main/proposals/0176-enforce-exclusive-access-to-memory.md)
 
