@@ -57,7 +57,11 @@ observable effectとは、一般的に「状態の変更」を指す。状態の
 
 ただし、実際はコンパイラが最適化していて、必ず毎回コピーしているわけではない。ただし、これは内部の詳細になるので、必ずこうなると推定するべきものではない。将来的に実装が変わる可能性もある。
 
-一方で、余計なコピーを防ぐ仕組みも存在している。
+https://stackoverflow.com/a/43493749
+https://gist.github.com/hamishknight/edbcc3b9cc92158a35488ce28108fe9f#optimising-value-type-parameters-to-pass-by-reference
+
+
+一方で、明示的に余計なコピーを防ぐ仕組みも存在している。
 
 ### COW(copy-on-write)とは？
 
