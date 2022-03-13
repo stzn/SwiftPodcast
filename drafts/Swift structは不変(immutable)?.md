@@ -4,30 +4,29 @@
   - [概要](#概要)
   - [内容](#内容)
     - [varに割り当てられた場合は変更できるので、不変ではないのでは？](#varに割り当てられた場合は変更できるので不変ではないのでは)
-    - [WWDC Recap(Building Better Apps with Value Types in Swift)](#wwdc-recapbuilding-better-apps-with-value-types-in-swift)
     - [COW(copy-on-write)とは？](#cowcopy-on-writeとは)
       - [仕組み](#仕組み)
       - [独自で定義した型にCOWを活用する方法](#独自で定義した型にcowを活用する方法)
-    - [structとインプレース変更](#structとインプレース変更)
-      - [Law of Exclusivityとは？](#law-of-exclusivityとは)
-      - [Modify Accessors](#modify-accessors)
-        - [背景](#背景)
-        - [改善](#改善)
-      - [borrow変数](#borrow変数)
-        - [背景](#背景-1)
-        - [改善](#改善-1)
-      - [ただし、didSetの場合、oldValueを参照しているとインプレースの変更は起きない。](#ただしdidsetの場合oldvalueを参照しているとインプレースの変更は起きない)
+      - [プロパティのdidSet](#プロパティのdidset)
+    - [Modify Accessors](#modify-accessors)
+      - [背景](#背景)
+      - [改善](#改善)
+    - [borrow変数](#borrow変数)
+      - [背景](#背景-1)
+      - [改善](#改善-1)
+    - [WWDC(Building Better Apps with Value Types in Swift)](#wwdcbuilding-better-apps-with-value-types-in-swift)
+    - [Law of Exclusivityとは？](#law-of-exclusivityとは)
   - [参考リンク](#参考リンク)
     - [Forums](#forums)
 ## 概要
 
 ## 内容
 
-Swiftのstructは不変(immutable)と呼ばれているが、実際はvarに割り当てられるとそのメンバを変更できるように見える。では、この不変とはどういう意味なのか？structの仕組みを見ながら考えてみる。
+Swiftのstructは不変(immutable)と呼ばれているが、実際はvarに割り当てられるとそのメンバを変更できるように見える。では、この不変とはどういう意味なのか？
 
 ### varに割り当てられた場合は変更できるので、不変ではないのでは？
 
-Swiftのstructの場合、**セマンティクス上**(※1)、値の変更時にコピーが発生して元の値へ影響を与えない。これはobservable effect(※2)という観点での話。structの値はその自身の「スコープを超えた範囲(他の変数への代入時、初期化や関数の引数へ渡す場合など)」ではコピーが発生し、元の値が変更されることはないので不変と言われている。これはstructだけではなく、Swiftの値型(enumなど)に当てはまる。
+Swiftのstructの場合、**セマンティクス上**、値の変更時にコピーが発生して元の値へ影響を与えない。これはobservable effect(※1)という観点での話。structの値はその自身の「スコープを超えた範囲(他の変数への代入時、初期化や関数の引数へ渡す場合など)」ではコピーが発生し、元の値が変更されることはないので不変と言われている。これはstructだけではなく、Swiftの値型(enumなど)に当てはまる。
 
 例えば、下記では、`foo.bar.x`のタイミングで"Got a new bar!"が出力されていて、新しい`Bar`が割り当てられていることがわかる。
 
@@ -47,33 +46,25 @@ var foo = Foo(bar: Bar(x: 1, y: 1))
 foo.bar.x = 10
 ```
 
-また、この余計なコピーを防ぐこと明示するためにCOW(copy-on-write)という仕組みが存在している(後述)。
-
 ※1  
-実際はコンパイラが最適化していて、必ず毎回コピーしているわけではなく、インプレースに(メモリの位置を変更せずにその場で)変更されることもある。これは内部の詳細になるので、必ずこうなると推定するべきものではない。将来的に実装が変わる可能性もある。
-
-※2  
 observable effectとは、一般的に「状態の変更」を指す。状態の変更とは例えば下記のようなもの:
 
 - 関数のスコープを超えた変数の変更(グローバルやstatic変数、関数の引数など)
 - ファイルやネットワークの読み書きなどのI/O処理
 - 画面の表示の更新
-
+　　　　
 - [observable effectとは？](http://introtorx.com/Content/v1.0.10621.0/09_SideEffects.html)
 
-### WWDC Recap(Building Better Apps with Value Types in Swift)
+ただし、実際はコンパイラが最適化していて、必ず毎回コピーしているわけではない。ただし、これは内部の詳細になるので、必ずこうなると推定するべきものではない。将来的に実装が変わる可能性もある。
 
-structにおける不変とは何か？について考えるにあたり、WWDC2015の「Building Better Apps with Value Types in Swift」の内容を振り返ってみる。
-
-詳細は[Building Better Apps with Value Types in Swift(WWDC2015)](../documents/Building%20Better%20Apps%20with%20Value%20Types%20in%20Swift.md)
-
+一方で、余計なコピーを防ぐ仕組みも存在している。
 
 ### COW(copy-on-write)とは？
 
 #### 仕組み
 
 大きな値型をメモリに割り当てたり、引数として渡す場合、メモリ内に紐づくデータの全てをコピーしなければならないため、コピーがパフォーマンスに影響を与える可能性がある。  
-この問題を最小限にするために、その値への参照がユニークな場合、変更が発生したとしてもコピーは発生しない。参照がユニークなので、コピーする必要がなく、ただその参照上で変更させることができる。これをCOW(copy-on-write)と呼ぶ。Standard Libraryの`Array`や`Dictionary`などにはCOWが使われている(全ての型に使われているわけではない)。
+この問題を最小限にするために、その値への参照がユニークな場合、変更が発生したとしてもコピーは発生しない。参照がユニークなので、コピーする必要がなく、ただその参照上で変更させること(インプレース変更)ができる。これをCOW(copy-on-write)と呼ぶ。Standard Libraryの`Array`や`Dictionary`などにはCOWが使われている(全ての型に使われているわけではない)。
 
 [Copy-on-Write Representation](https://github.com/apple/swift/blob/main/docs/SIL.rst#copy-on-write-representation)
 
@@ -113,28 +104,23 @@ struct Box<T> {
 `ref`への参照がユニークである場合はインプレース変更が行なわれ、そうでない場合は新しいインスタンスを設定している。  
 上記のリンクに記載のあるように、これは大きい値型を使用している際に、変数への割り当てや関数の引数への受け渡し時にコピーが発生すると、コピーに時間がかかってパフォーマンスに影響を与えるようなケースで利用される。
 
-### structとインプレース変更
+#### プロパティのdidSet
 
-COWを実装していないstructの場合、このインプレースの変更が同時に発生することで予期せぬ紛らわしい結果を招くことがあった(Swift3)。これによってコンパイラやStandard Libraryの実装の大きな壁となっていた。そこでLaw of Exclusivityを導入した。
+他にも`willSet`がなく`didSet`のみかつ`oldValue`を参照していない場合はインプレースの変更ができる。
+[SE-0268: Refine didSet Semantics](https://forums.swift.org/t/se-0268-refine-didset-semantics/30049)
 
-#### Law of Exclusivityとは？
+※ これは`struct`に限った話ではない
 
-同じ変数(※)への2つのアクセスは、両方のアクセスが読み取りでない限り重複することはできない、というルール。
+また内部的に実装されており、今後公開予定の機能もある。
 
-※ グローバル変数、ローカル変数、クラスおよび構造体のプロパティなど、あらゆる種類の可変メモリを意味する。
-
-Swift3ではこれが導入されていなかった。
-
-詳細は[Law of Exclusivity](./../documents/Law%20of%20Exclusivity.md)
-
-#### Modify Accessors
+### Modify Accessors
 
 上記で記載したような瞬間的ではない可変アクセスを実装するための`modify`アクセサも現在提案されている。これを使うとコルーチン(※)でインプレース処理ができるようになる。
 
 ※ コルーチン
 関数を任意の箇所でストップ、再開できる機能。サブルーチンがエントリーからリターンまでを一つの処理単位とするのに対し、コルーチンはいったん処理を中断した後、続きから処理を再開できる。
 
-##### 背景
+#### 背景
 
 `get`/`set`の仕組みは関数の呼び出しと同じ。`get`から戻り値を返す時にコピーが起きる。`set`は値の所有権が譲渡される。
 
@@ -165,7 +151,7 @@ foo.set_x(foo_x)
 
 そこで、値の一部にこのオーバーヘッドなしでアクセスできるようにしたい。
 
-##### 改善
+#### 改善
 
 `read`と`modify`を使ってコルーチンでインプレース処理できるようにする。
 
@@ -186,11 +172,11 @@ struct Foo {
 
 [Modify Accessors](https://forums.swift.org/t/modify-accessors/31872)
 
-#### borrow変数
+### borrow変数
 
 他にもインプレースに変更できるローカル変数も提案されている。
 
-##### 背景
+#### 背景
 
 深い(ネストした)オブジェクトグラフを利用している場合、そのグラフ内で深くネストしているプロパティにローカル変数を割り当てたいと思うことは当然ある:
 
@@ -202,7 +188,7 @@ greatAunt.sayGoodbye()
 
 しかし、グローバル変数やクラスインスタンスのような共有された可変状態のオブジェクトの場合、このローカル変数のバインディングはオブジェクトから取り出した値のコピーが必須になる。上記の`mother`や`mother.father`は同じオブジェクトを参照しているプログラムのどこからでも変更が可能であるため、`mother.father.sister`の値は、ローカル関数内の外側からオブジェクトグラフの変更から独立させるために、ローカル変数`greatAunt`にコピーさせなければならない。値型であっても、同じスコープ内で複数回変更が発生する場合は、その時点での値を保存するために、それぞれの値バインディング時に強制的にコピーが発生する。
 
-##### 改善
+#### 改善
 
 そこで、そのオブジェクトグラフを参照している変数の存続している間は、オブジェクトグラフ内の値をインプレースで共有できるようにするために、そのバインディングがアクティブな間は、このような変更(コピー)が起きないようにしたい。これを行うには、コピーせずにインプレースで値にバインドする新しい種類のローカル変数バインディングを導入し、インプレースで値にアクセスするために必要なオブジェクトの借用をアサートする。
 
@@ -264,12 +250,19 @@ enum ZeroOneOrMany<T> {
 }
 ```
 
-#### ただし、didSetの場合、oldValueを参照しているとインプレースの変更は起きない。
+### WWDC(Building Better Apps with Value Types in Swift)
 
-プロパティオブザーバの`didSet`は`oldValue`を参照している場合、新しい値と`oldValue`の両方を同時に参照できるようにするためにもコピーが発生する。  
-`willSet`がなく`didSet`のみかつ`oldValue`を参照していない場合はインプレースの変更ができる。
+structについてのより詳細は[Building Better Apps with Value Types in Swift(WWDC2015)](../documents/Building%20Better%20Apps%20with%20Value%20Types%20in%20Swift.md)にて記載している。
 
-[SE-0268: Refine didSet Semantics](https://forums.swift.org/t/se-0268-refine-didset-semantics/30049)
+### Law of Exclusivityとは？
+
+同じ変数(※)への2つのアクセスは、両方のアクセスが読み取りでない限り重複することはできない、というルール。
+
+※ グローバル変数、ローカル変数、クラスおよび構造体のプロパティなど、あらゆる種類の可変メモリを意味する。
+
+Swift3ではこれが導入されていなかった。
+
+詳細は[Law of Exclusivity](./../documents/Law%20of%20Exclusivity.md)
 
 ## 参考リンク
 
