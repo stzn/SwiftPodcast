@@ -1,6 +1,6 @@
-# Swift CodingKeyRepresentableプロトコルでStringとInt以外がKeyのDictionaryも適切にエンコード、デコードできるように
+# Swift CodingKeyRepresentableでDictionaryを適切にエンコード/デコードする
 
-- [Swift CodingKeyRepresentableプロトコルでStringとInt以外がKeyのDictionaryも適切にエンコード、デコードできるように](#swift-codingkeyrepresentableプロトコルでstringとint以外がkeyのdictionaryも適切にエンコードデコードできるように)
+- [Swift CodingKeyRepresentableでDictionaryを適切にエンコード/デコードする](#swift-codingkeyrepresentableでdictionaryを適切にエンコードデコードする)
   - [概要](#概要)
   - [内容](#内容)
     - [問題点](#問題点)
