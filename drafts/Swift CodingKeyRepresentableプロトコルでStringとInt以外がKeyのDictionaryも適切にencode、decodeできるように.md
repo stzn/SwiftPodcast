@@ -49,9 +49,9 @@ let jsonData = Data(json.utf8)
 let dataToEncode = [Key.key: "value"]
 do {
    let decoded = try JSONDecoder().decode([Key: String].self, from: jsonData)
-   print(decoded) // ①
+
    let encoded = try JSONEncoder().encode(dataToEncode)
-   print(String(data: encoded, encoding: .utf8)!)
+   print(String(data: encoded, encoding: .utf8)!) // ①
 } catch {
    print(error) // ②
 }
@@ -59,7 +59,7 @@ do {
 
 ①エンコード結果
 ```swift
-[ "key", value ]
+[ "key", "value" ]
 ```
 
 ②デコード結果
@@ -74,7 +74,9 @@ typeMismatch(Swift.Array<Any>, Swift.DecodingError.Context(codingPath: [], debug
 
 をキーとして使用した場合に多くの人が混乱している。
 
-しかし、既存の実装に修正を加えると
+※ 実際に`String`と`Int`は特別扱いされている。
+https://github.com/apple/swift/blob/main/stdlib/public/core/Codable.swift#L5616
+しかし、この既存の実装に修正を加えると
 
 1. これまでの動作を破壊してしまい、後方互換性に影響がある(新しいコードは過去のコードをでコードできない、逆も同様)。
 2. この動作は標準ライブラリと結びついているので、OSのバージョンによって動作が異なる。
@@ -88,7 +90,7 @@ typeMismatch(Swift.Array<Any>, Swift.DecodingError.Context(codingPath: [], debug
 
 `CodingKeyRepresentable`に準拠した型は`CodingKey`として利用できることを示し、`KeyedContainer`にエンコードするためにそれらで定義された`CodingKey`を`Dictionary`にオプトインで使用することができる。
 
-このオプトイン(分岐処理)が発生するのは、`CodingKeyRepresentable`プロトコルが使用できるSwiftのバージョンのみなので、このプロトコルの利用者は状況に応じた対応ができる。例えば、今独自のワークアラウンドを入れいても、将来このプロトコルが使用できるSwiftのバージョンのみをサポートした場合は、ワークアラウンドを無視してこの動作に頼ることができる。
+このオプトインは、プロトコルが利用可能なバージョンのSwiftでのみ発生するため、ユーザは状況を完全に制御できる。例えば、現在、独自のワークアラウンドを使用していても、この機能を備えた特定の将来のSwiftバージョンを実行するiOSバージョンのみをサポートすると、独自のワークアラウンドをスキップして、代わりにこの動作に依存できる。
 
 ```swift
 /// A type that can be converted to and from a coding key.
@@ -118,7 +120,7 @@ https://github.com/apple/swift/blob/4f7f9f5e615f815800d2c802d6daa39c5e5cf9a2/std
 ```swift
 
 let json = "{\"key\": \"value\"}"
-enum Key: String, Codable, CodingKeyRepresentable{
+enum Key: String, Codable, CodingKeyRepresentable {
    case key
 }
 let jsonData = Data(json.utf8)
@@ -199,7 +201,7 @@ try String(data: encoder.encode(data), encoding: .utf8)
 let decoder = JSONDecoder()
 try decoder.decode([ID: String].self, from: encoder.encode(data))
 
-/
+/*
 [
     main.ID(stringValue: "<some-identifier-1>"): "...",
     main.ID(stringValue: "<some-identifier-2>"): "..."
@@ -335,11 +337,12 @@ https://github.com/apple/swift/blob/4f7f9f5e615f815800d2c802d6daa39c5e5cf9a2/std
 
 このプロトコルを取り入れることは追加なので直接は影響がない。
 
-しかし、プロトコルを`CodingKeyRepresentable`に取り入れる場合は注意が必要。なぜなら、これまで`Dictionary`のキーとしてエンコードされていた任意の`T`型に取り入れた場合、アーカイブとの後方互換性が保てなくなる可能性がある。新しい型が`CodingKeyRepresentable`の場合や既存の型が`Codable`に新しく準拠する場合は安全。
+ただし、以前に`Dictionary`のキーとしてエンコードされたT型に準拠させると、アーカイブとの後方互換性が失われる可能性があるため、特別な注意が必要。 新しい型または`Codable`に新しく準拠した型に`CodingKeyRepresentable`を準拠させることは常に安全。
 
 ### その他の検討事項
 
 #### 標準ライブラリの型をCodingKeyRepresentableに準拠させる
+
 
 後方互換性の懸念により、標準ライブラリやFoundationの型をさせることは提案しない。もしエンドユーザのコードが既存の型でこの変換を必要とする場合は、それらの型に代わって準拠するWrapper型を作成することを推奨(例えば、`UUID`を含み、`CodingKeyRepresentable`に準拠して`UUID`を`Dictionary`のキーとして直接使用できるようにする`MyUUIDWrapper`)。
 
