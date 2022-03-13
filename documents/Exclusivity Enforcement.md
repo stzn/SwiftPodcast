@@ -1,6 +1,6 @@
-# Law of Exclusivityとは？
+# Exclusivity Enforcementとは？
 
-- [Law of Exclusivityとは？](#law-of-exclusivityとは)
+- [Exclusivity Enforcementとは？](#exclusivity-enforcementとは)
   - [問題点(Swift3時代)](#問題点swift3時代)
   - [「瞬間的」ではないアクセスを排除すれば良い？](#瞬間的ではないアクセスを排除すれば良い)
   - [解決策](#解決策)
@@ -196,4 +196,5 @@ modifying(&object.pair) { pair in swap(&pair.x, &pair.y) }
 
 ## 参考
 
-[Enforce Exclusive Access to Memory](https://github.com/apple/swift-evolution/blob/main/proposals/0176-enforce-exclusive-access-to-memory.md)
+- [Enforce Exclusive Access to Memory](https://github.com/apple/swift-evolution/blob/main/proposals/0176-enforce-exclusive-access-to-memory.md)
+- [Swift 5 Exclusivity Enforcement](https://www.swift.org/blog/swift-5-exclusivity/)
