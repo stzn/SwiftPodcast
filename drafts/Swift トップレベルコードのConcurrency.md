@@ -156,3 +156,4 @@ let a = 10
 - [Fix top-level global-actor isolation crash](https://github.com/apple/swift/pull/40963)
 - [Make top-level code variables @MainActor @preconcurrency](https://github.com/apple/swift/pull/40998)
 - [Concurrent top-level detection](https://github.com/apple/swift/pull/41061)
+- [SE-0343: De-experimentalify async top-level context](https://github.com/apple/swift/pull/41805)
