@@ -14,6 +14,7 @@
       - [RawValueがStringまたはIntのRawRepresentableのCodingKeyRepresentableにはデフォルト実装を提供](#rawvalueがstringまたはintのrawrepresentableのcodingkeyrepresentableにはデフォルト実装を提供)
       - [内部型の_DictionaryCodingKeyが失敗しないイニシャライザを持つように変更](#内部型の_dictionarycodingkeyが失敗しないイニシャライザを持つように変更)
     - [既存のコードへの影響](#既存のコードへの影響)
+    - [下位バージョンでは有効にならない?](#下位バージョンでは有効にならない)
     - [その他の検討事項](#その他の検討事項)
       - [標準ライブラリの型をCodingKeyRepresentableに準拠させる](#標準ライブラリの型をcodingkeyrepresentableに準拠させる)
       - [標準ライブラリにAnyCodingKey型を追加](#標準ライブラリにanycodingkey型を追加)
@@ -338,6 +339,23 @@ https://github.com/apple/swift/blob/4f7f9f5e615f815800d2c802d6daa39c5e5cf9a2/std
 このプロトコルを取り入れることは追加なので直接は影響がない。
 
 ただし、以前に`Dictionary`のキーとしてエンコードされたT型に準拠させると、アーカイブとの後方互換性が失われる可能性があるため、特別な注意が必要。 新しい型または`Codable`に新しく準拠した型に`CodingKeyRepresentable`を準拠させることは常に安全。
+
+### 下位バージョンでは有効にならない?
+
+※ Xcode13.3 RCにてiOS14.5、iOS15.2のシミュレータで確認
+
+プロトコルにOSのバージョン制約があるため、下位のバージョンでは、[問題点](#問題点)で記載した挙動になる。
+
+```swift
+@available(macOS 12.3, iOS 15.4, watchOS 8.5, tvOS 15.4, *)
+public protocol CodingKeyRepresentable {
+    @available(macOS 12.3, iOS 15.4, watchOS 8.5, tvOS 15.4, *)
+    var codingKey: CodingKey { get }
+
+    @available(macOS 12.3, iOS 15.4, watchOS 8.5, tvOS 15.4, *)
+    init?<T>(codingKey: T) where T : CodingKey
+}
+```
 
 ### その他の検討事項
 
