@@ -1,10 +1,39 @@
-# Swift プロトコルの制約をもっと簡単に書けるように
+# Swift プロトコルの主要な関連型(associated type)の同じ型要件(same-type requirement)をもっと簡単に
 
-<!-- 最後にTable of Contentsを入れる -->
+- [Swift プロトコルの主要な関連型(associated type)の同じ型要件(same-type requirement)をもっと簡単に](#swift-プロトコルの主要な関連型associated-typeの同じ型要件same-type-requirementをもっと簡単に)
+  - [概要](#概要)
+  - [内容](#内容)
+    - [問題点](#問題点)
+    - [解決策](#解決策)
+    - [詳細](#詳細)
+      - [糖衣シンタックスの位置で制約されたプロトコル](#糖衣シンタックスの位置で制約されたプロトコル)
+      - [opaque result typeの制約付きプロトコル](#opaque-result-typeの制約付きプロトコル)
+      - [他に使える位置](#他に使える位置)
+      - [非サポート位置](#非サポート位置)
+    - [その他の代替案](#その他の代替案)
+      - [関連型の名前を必須にする 例: Collection<.Element == String>](#関連型の名前を必須にする-例-collectionelement--string)
+      - [最初にopaque result type要件のよりジェネリックなシンタックスを実装](#最初にopaque-result-type要件のよりジェネリックなシンタックスを実装)
+    - [通常のassociatedtype宣言に主要な関連型のアノテーションを付ける](#通常のassociatedtype宣言に主要な関連型のアノテーションを付ける)
+      - [ジェネリックプロトコル(Generic protocols)](#ジェネリックプロトコルgeneric-protocols)
+    - [ソース互換性](#ソース互換性)
+    - [ABIの安定性への影響](#abiの安定性への影響)
+    - [APIのレジリエンスへの影響](#apiのレジリエンスへの影響)
+    - [将来の検討事項](#将来の検討事項)
+      - [標準ライブラリへの導入](#標準ライブラリへの導入)
+      - [制約付き存在型](#制約付き存在型)
+  - [参考リンク](#参考リンク)
+    - [Forums](#forums)
+    - [プロポーザルドキュメント](#プロポーザルドキュメント)
 
 ## 概要
 
-[Improving the UI of generics](https://forums.swift.org/t/improving-the-ui-of-generics/22814#heading--directly-expressing-constraints)を実現するためのステップとして、ジェネリックパラメータに準拠し、同じ型の要件を介して関連型(associated type)を制約するための新しいシンタックスを導入する。
+[Improving the UI of generics](https://forums.swift.org/t/improving-the-ui-of-generics/22814#heading--directly-expressing-constraints)を実現するためのステップとして、このプロポーザルではジェネリックパラメータに準拠し、同じ型要件(※)が必要な関連型(associated type)を制約するための新しいシンタックスを紹介する。
+
+※ 同じ型要件とは以下のようなものを指す
+
+```swift
+Collection where Element == String
+```
 
 ## 内容
 
@@ -61,10 +90,10 @@ func concatenate<S : Sequence>(_ lhs: S, _ rhs: S) -> S where S.Element == Strin
 }
 ```
 
-この`where`句はジェネリックで複雑な制約を設定できるが、`Array<String>`で具体的な型でのシンプルな実装と比べるとかなり形が違っており、これを読んだり書く際にはで理解するのに苦労するだろう。これは同じ型であるという制約を具体的な型と同じように書ける方法があればうれしい。
+この`where`句はジェネリックで複雑な制約を設定できるが、`Array<String>`で具象型でのシンプルな実装と比べるとかなり形が違っており、これを読んだり書く際にはで理解するのに苦労するだろう。これは同じ型要件を具象型と同じように書ける方法があればうれしい。
 ### 解決策
 
-同じ型であるという要件をプロトコルの「主要な関連型」としてプロトコルの準拠要件と一緒に宣言できる新しいシンタックスを導入する。これはジェネリックの型パラメータに具体的な型を適用するのと似ていて、`AsyncSequence<String>`や`AsyncSequence<[Lines]>`のように書くことができ、`Array<String>`や`Array<[Lines]>`と同じ感覚と理解を構築できる。
+同じ型要件をプロトコルの「主要な関連型」としてプロトコルの準拠要件と一緒に宣言できる新しいシンタックスを導入する。これはジェネリックの型パラメータに具象型を適用するのと似ていて、`AsyncSequence<String>`や`AsyncSequence<[Lines]>`のように書くことができ、`Array<String>`や`Array<[Lines]>`と同じ感覚と理解を構築できる。
 
 プロトコルにもジェネリックパラメータのリストに似たシンタックスで一つ以上の関連型を宣言できる:
 
@@ -80,9 +109,9 @@ protocol DictionaryProtocol<Key : Hashable, Value> {
 }
 ```
 
-主要な関連型を持つプロトコルは、プロトコル準拠要件をこれまで書くことができた任意の位置から、山かっこで囲まれた型パラメタータのリストを使用して参照できる。
+主要な関連型を持つプロトコルは、プロトコル準拠要件をこれまで書くことができた任意の位置から、山かっこ(`<>`)で囲まれた型パラメータリストを使用して参照できる。
 
-例えば、opaque result type は、主要な関連型を制約できるようになった:
+例えば、opaque result typeを主要な関連型を制約できるようになった:
 
 ```swift
 func readSyntaxHighlightedLines(_ file: String) -> some AsyncSequence<[Token]> {
@@ -98,7 +127,7 @@ func concatenate<S : Sequence<String>>(_ lhs: S, _ rhs: S) -> S {
 }
 ```
 
-主要な関連型は、通常、呼び出し側によって提供される関連型に使用することを目的としている。これらの関連型は、準拠した型のジェネリックパラメータとしてよく見られる。例えば、`Array<Element>`と`Set<Element>`はどちらも`Sequence`に準拠しており、`Element`の関連型はジェネリックパラメータとして見られるため、`Element`は`Sequence`の主要な関連型の候補となるのは自然である。これにより、`Sequence <Int>`型と、`Array<Int>`、`Set<Int>`型の間に明確な類似性ができる。
+主要な関連型は、通常、呼び出し側によって提供される関連型に使用することを目的としている。これらの関連型は、準拠した型のジェネリックパラメータとしてよく見られる。例えば、`Array<Element>`と`Set<Element>`はどちらも`Sequence`に準拠しており、`Element`の関連型はジェネリックパラメータとして見られるため、`Element`は`Sequence`の主要な関連型の候補となるのは自然である。これにより、`Sequence<Int>`と、`Array<Int>`、`Set<Int>`の間に明確な類似性ができる。
 
 ### 詳細
 
@@ -143,7 +172,7 @@ protocol SetProtocol<Element> where Element: Hashable {
 
 #### 糖衣シンタックスの位置で制約されたプロトコル
 
-制約されたプロトコルのシンタックスが現れる可能性のある位置の完全なリストは次の通り。最初の一連のケースでは、新しいシンタックスは主要な関連型を制約する同じ型であるという要件を持つ既存の`where`句のシンタックスと同等。
+制約されたプロトコルのシンタックスが現れる可能性のある位置の完全なリストは次の通り。最初の一連のケースでは、新しいシンタックスは主要な関連型を制約する同じ型要件を持つ既存の`where`句のシンタックスと同等。
 
 - extensionで拡張された型
 
@@ -221,7 +250,7 @@ func sort<C : Collection, E : Equatable>(elements: inout C)
     where C.Element == E
 ```
 
-上記のうちのいずれかの位置から参照されている場合、準拠要件の`T : P<Arg1, Arg2...>`は一つ以上の同じ型である要件が続く`T: P`という準拠要件に分解される
+上記のうちのいずれかの位置から参照されている場合、準拠要件の`T : P<Arg1, Arg2...>`は一つ以上の同じ型要件が続く`T: P`という準拠要件に分解される
 
 ```swift
 T: P
@@ -230,7 +259,7 @@ T.PrimaryType2 == Arg2
 ...
 ```
 
-右側の`Arg1`がopaqueパラメータ宣言の場合、同じ型である要件の右側として使用するために、新しいジェネリックパラメータが導入される。詳細は[SE-0341 Opaque Parameter Declarations](https://github.com/apple/swift-evolution/blob/main/proposals/0341-opaque-parameters.md)
+右側の`Arg1`がopaqueパラメータ宣言の場合、同じ型要件の右側で使用するために、新しいジェネリックパラメータが導入される。詳細は[SE-0341 Opaque Parameter Declarations](https://github.com/apple/swift-evolution/blob/main/proposals/0341-opaque-parameters.md)
 
 #### opaque result typeの制約付きプロトコル
 
@@ -284,7 +313,7 @@ func takeEquatableSequence(_ seqs: some Sequence<Int> & Equatable)
 
 #### 関連型の名前を必須にする 例: Collection<.Element == String>
 
-関連型名を明示的に山括弧内(`<>`)に書いて制約するといくつかの利点がある
+関連型名を明示的に山かっこ内に書いて制約するといくつかの利点がある
 
 - プロトコル宣言で特別なシンタックスを必要としない
 - 明示的な関連型名は、任意の関連型を制限することを可能にする
@@ -309,7 +338,7 @@ func adjacentPairs<Element>(_: some Sequence<Element>,
 -> some Sequence<.Element == (Element, Element)>
 ```
 
-- このより詳細なシンタックスは、既存のシンタックスに対する明確な改善がない。ここでは、`where`句のほとんどは明示的に書かれている。また、`where`句の代わりにジェネリックシグネチャの前の山括弧内に括弧内に、ほとんどまたは全てのジェネリック制約を指定することを促し、[SE-0081 Move where clause to end of declaration.](https://github.com/apple/swift-evolution/blob/main/proposals/0081-move-where-expression.md)の主な信条に違反する
+- このより詳細なシンタックスは、既存のシンタックスに対する明確な改善がない。ここでは、`where`句のほとんどは明示的に書かれている。また、`where`句の代わりにジェネリックシグネチャの前の山かっこ内に括弧内に、ほとんどまたは全てのジェネリック制約を指定することを促し、[SE-0081 Move where clause to end of declaration.](https://github.com/apple/swift-evolution/blob/main/proposals/0081-move-where-expression.md)の主な信条に違反する
 
 - 最後に、このシンタックスは、具象型とジェネリクスの間の対称性を欠いている。`Array<Int>`からの汎用化には、単なる`some Collection<Int>`の代わりに、`some Collection<.Element == Int>`という新しいシンタックスを学習および書く必要がある。
 
@@ -317,7 +346,7 @@ func adjacentPairs<Element>(_: some Sequence<Element>,
 
 #### 最初にopaque result type要件のよりジェネリックなシンタックスを実装
 
-前述のように、opaque result typeの場合、主要な関連型の同じ型であるという要件を記述できる`where`句を含めることができないため、このプロポーザルは新しい表現力を導入している。
+前述のように、opaque result typeの場合、主要な関連型の同じ型要件を記述できる`where`句を含めることができないため、このプロポーザルは新しい表現力を導入している。
 
 最初に、opaque result typeの汎用的な要件を可能にする言語機能を導入することも可能。可能性の1つとしては、「名前付きopaque result type」。これは、`where`句で要件を設定することができる。
 
@@ -375,7 +404,7 @@ protocol SetProtocol {
 
 #### ジェネリックプロトコル(Generic protocols)
 
-このプロポーザルでは、Haskellのマルチパラメータ型クラスまたはRustのジェネリック特性をモデルにした架空の「ジェネリックプロトコル」機能の代わりに、主要な関連型を制約するために山括弧シンタックスを使用する。 このような「ジェネリックプロトコル」は、単一の`Self`準拠型だけでなく、複数の型にわたってパラメータ化できるという考え方である:
+このプロポーザルでは、Haskellのマルチパラメータ型クラスまたはRustのジェネリック特性をモデルにした架空の「ジェネリックプロトコル」機能の代わりに、主要な関連型を制約するために山かっこシンタックスを使用する。 このような「ジェネリックプロトコル」は、単一の`Self`準拠型だけでなく、複数の型にわたってパラメータ化できるという考え方である:
 
 ```swift
 protocol ConvertibleTo<Other> {
@@ -391,7 +420,7 @@ extension String : ConvertibleTo<Double> {
 }
 ```
 
-主要な関連型の制約は、ジェネリックプロトコルよりも汎用的に有用な機能で、主要な関連型の制約に山括弧シンタックスを使用すると、`Array<Int>`と`Collection<Int>`の明確な類似性により、ユーザが一般的に期待するものが得られると考えている。
+主要な関連型の制約は、ジェネリックプロトコルよりも汎用的に有用な機能で、主要な関連型の制約に山かっこシンタックスを使用すると、`Array<Int>`と`Collection<Int>`の明確な類似性により、ユーザが一般的に期待するものが得られると考えている。
 
 このプロポーザル提案には、将来、異なるシンタックスでジェネリックプロトコルを導入することを妨げるものはない。おそらく、関連型の場合のように、型パラメータ間に機能依存性(functional dependency)がないことを明確にするために、`Self`型を他の型よりも優先しないものになる:
 
