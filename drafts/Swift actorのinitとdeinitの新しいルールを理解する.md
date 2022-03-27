@@ -643,9 +643,9 @@ func someFunc() async {
 }
 ```
 
-GAITの場合、nonisolatedのイニシャライザは同じルールが適用される。つまり、そのようなイニシャライザに外部から入る際は、渡される値は`Sendable`でなければならない。globalではない`actor`との違いは:
+GAITの場合、nonisolatedのイニシャライザには同じルールが適用される。つまり、そのようなイニシャライザに外部から入る際は、渡される値は`Sendable`でなければならない。globalではない`actor`との違いは:
 
-1. 最初のイニシャライザの呼び出し先が既に同じglobal-actorに分離されている場合、`Sendable`に縛る必要はない(いつも通り)
+1. 最初のイニシャライザの呼び出し側が既に同じglobal-actorに分離されている場合、`Sendable`に縛る必要はない(いつも通り)
 2. `nonisolated`のイニシャライザからglobal-actorに分離されたイニシャライザに委譲された場合は、`Sendable`でなければならない
 
 2番目の違いは`nonisolated`かつ`async`のイニシャライザからGAITに分離されたイニシャライザに委譲された場合にのみ適用される。
