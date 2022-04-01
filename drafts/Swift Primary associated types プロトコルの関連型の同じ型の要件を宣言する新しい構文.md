@@ -1,6 +1,6 @@
-# Swift プロトコルの主要な関連型(associated type)の同じ型要件(same-type requirement)をもっと簡単に
+# Swift Primary associated types プロトコルの関連型の同じ型の要件を宣言する新しい構文
 
-- [Swift プロトコルの主要な関連型(associated type)の同じ型要件(same-type requirement)をもっと簡単に](#swift-プロトコルの主要な関連型associated-typeの同じ型要件same-type-requirementをもっと簡単に)
+- [Swift Primary associated types プロトコルの関連型の同じ型の要件を宣言する新しい構文](#swift-primary-associated-types-プロトコルの関連型の同じ型の要件を宣言する新しい構文)
   - [概要](#概要)
   - [内容](#内容)
     - [問題点](#問題点)
@@ -11,9 +11,10 @@
       - [他に使える位置](#他に使える位置)
       - [非サポート位置](#非サポート位置)
     - [その他の代替案](#その他の代替案)
+      - [主要関連型リストのエントリを宣言として扱う](#主要関連型リストのエントリを宣言として扱う)
       - [関連型の名前を必須にする 例: Collection<.Element == String>](#関連型の名前を必須にする-例-collectionelement--string)
       - [最初にopaque result type要件のよりジェネリックなシンタックスを実装](#最初にopaque-result-type要件のよりジェネリックなシンタックスを実装)
-    - [通常のassociatedtype宣言に主要な関連型のアノテーションを付ける](#通常のassociatedtype宣言に主要な関連型のアノテーションを付ける)
+    - [通常のassociatedtype宣言に主要関連型のアノテーションを付ける](#通常のassociatedtype宣言に主要関連型のアノテーションを付ける)
       - [ジェネリックプロトコル(Generic protocols)](#ジェネリックプロトコルgeneric-protocols)
     - [ソース互換性](#ソース互換性)
     - [ABIの安定性への影響](#abiの安定性への影響)
@@ -39,27 +40,27 @@ Collection where Element == String
 
 ### 問題点
 
-ソースファイルの各行を`AsyncSequence`として取得する関数を考える:
+ソースファイルの各行を`Sequence`として取得する関数を考える:
 
 ```swift
-struct LinesAsyncSequence : AsyncSequence {
-    struct AsyncIterator : AsyncIteratorProtocol {
+struct LinesSequence : Sequence {
+    struct Iterator : IteratorProtocol {
         mutating func next() async -> String? { ... }
     }
   
-    func makeAsyncIterator() -> AsyncIterator {
-        return AsyncIterator()
+    func makeIterator() -> Iterator {
+        return Iterator()
     }
 }
 
-func readLines(_ file: String) -> LinesAsyncSequence { ... }
+func readLines(_ file: String) -> LinesSequence { ... }
 ```
 
-シンタックスハイライトのライブラリを開発していると想定。`Element`の型が`[Token]`で、各行のシンタックスハイライトされたトークンを表現する`SyntaxTokensAsyncSequence`という別の型で戻り値をラップする別の関数を定義したいと考える。
+シンタックスハイライトのライブラリを開発していると想定。`Element`の型が`[Token]`で、各行のシンタックスハイライトされたトークンを表現する`SyntaxTokensSequence`という別の型で戻り値をラップする別の関数を定義したいと考える。
 
 ```swift
 func readSyntaxHighlightedLines(_ file: String) 
-    -> SyntaxTokensAsyncSequence<LinesAsyncSequence> {
+    -> SyntaxTokensSequence<LinesSequence> {
       ...
 }
 ```
@@ -67,12 +68,12 @@ func readSyntaxHighlightedLines(_ file: String)
 この時点で、具体的な結果の型はかなり複雑になるので、`some`を使ってopaque result typeの背後にそれを隠したいと思う。
 
 ```swift
-func readSyntaxHighlightedLines(_ file: String) -> some AsyncSequence {
+func readSyntaxHighlightedLines(_ file: String) -> some Sequence {
     ...
 }
 ```
 
-しかし、この`readSyntaxHighlightedLines()`の定義は元のバージョンと比べるとあまり役に立たない。なぜなら、戻り値の`AsyncSequence`の関連型`Element`が`[Token]`であるという要件を表現できないからである。
+しかし、この`readSyntaxHighlightedLines()`の定義は元のバージョンと比べるとあまり役に立たない。なぜなら、戻り値の`Sequence`の関連型`Element`が`[Token]`であるという要件を表現できないからである。
 
 他の例として、2つの`String`の配列を結合するグローバル関数`concatenate`を考える:
 
@@ -91,15 +92,16 @@ func concatenate<S : Sequence>(_ lhs: S, _ rhs: S) -> S where S.Element == Strin
 ```
 
 この`where`句はジェネリックで複雑な制約を設定できるが、`Array<String>`で具象型でのシンプルな実装と比べるとかなり形が違っており、これを読んだり書く際にはで理解するのに苦労するだろう。これは同じ型要件を具象型と同じように書ける方法があればうれしい。
+
 ### 解決策
 
-同じ型要件をプロトコルの「主要な関連型」としてプロトコルの準拠要件と一緒に宣言できる新しいシンタックスを導入する。これはジェネリックの型パラメータに具象型を適用するのと似ていて、`AsyncSequence<String>`や`AsyncSequence<[Lines]>`のように書くことができ、`Array<String>`や`Array<[Lines]>`と同じ感覚と理解を構築できる。
+同じ型要件をプロトコルの「主要関連型」(primary associated type)としてプロトコルの準拠要件と一緒に宣言できる新しいシンタックスを導入する。これはジェネリックの型パラメータに具象型を適用するのと似ていて、`Sequence<String>`や`Sequence<[Lines]>`のように書くことができ、`Array<String>`や`Array<[Lines]>`と同じ感覚と理解を構築できる。
 
 プロトコルにもジェネリックパラメータのリストに似たシンタックスで一つ以上の関連型を宣言できる:
 
 ```swift
-protocol AsyncSequence<Element> {
-    associatedtype Iterator : AsyncIteratorProtocol
+protocol Sequence<Element> {
+    associatedtype Iterator : IteratorProtocol
         where Element == Iterator.Element
     ...
 }
@@ -109,12 +111,12 @@ protocol DictionaryProtocol<Key : Hashable, Value> {
 }
 ```
 
-主要な関連型を持つプロトコルは、プロトコル準拠要件をこれまで書くことができた任意の位置から、山かっこ(`<>`)で囲まれた型パラメータリストを使用して参照できる。
+主要関連型を持つプロトコルは、プロトコル準拠要件をこれまで書くことができた任意の位置から、山かっこ(`<>`)で囲まれた型パラメータリストを使用して参照できる。
 
-例えば、opaque result typeを主要な関連型を制約できるようになった:
+例えば、opaque result typeを主要関連型を制約できるようになった:
 
 ```swift
-func readSyntaxHighlightedLines(_ file: String) -> some AsyncSequence<[Token]> {
+func readSyntaxHighlightedLines(_ file: String) -> some Sequence<[Token]> {
     ...
 }
 ```
@@ -127,28 +129,32 @@ func concatenate<S : Sequence<String>>(_ lhs: S, _ rhs: S) -> S {
 }
 ```
 
-主要な関連型は、通常、呼び出し側によって提供される関連型に使用することを目的としている。これらの関連型は、準拠した型のジェネリックパラメータとしてよく見られる。例えば、`Array<Element>`と`Set<Element>`はどちらも`Sequence`に準拠しており、`Element`の関連型はジェネリックパラメータとして見られるため、`Element`は`Sequence`の主要な関連型の候補となるのは自然である。これにより、`Sequence<Int>`と、`Array<Int>`、`Set<Int>`の間に明確な類似性ができる。
+主要関連型は、通常、呼び出し側によって提供される関連型に使用されることを目的としている。これらの関連型は、準拠した型のジェネリックパラメータとしてよく現れる。例えば、`Array<Element>`と`Set<Element>`はどちらも`Sequence`に準拠しており、`Element`の関連型はそれに応じた具体的な型としてジェネリックパラメータに現れるため、`Element`が`Sequence`の主要関連型の候補となるのは自然である。これにより、制約のあるプロトコル`Sequence<Int>`と、具体的な型の`Array<Int>`、`Set<Int>`の間に明確な対応関係ができる。
 
 ### 詳細
 
-プロトコル宣言では、山かっこで区切られたオプションの主要な関連型リストをプロトコル名の後に続けることができる。存在する場合、少なくとも1つの主要な関連型を宣言する必要がある。複数の主要な関連型はコンマで区切らる。各主要な関連型は、オプションで継承句を宣言できる。正式な文法は次のように修正され、オプションの主要な関連型プリストの生成がプロトコル宣言に追加される。
+プロトコル宣言では、山かっこで区切られたオプションの主要関連型リストをプロトコル名の後に続けることができる。存在する場合、少なくとも1つの主要関連型を宣言する必要がある。複数の主要関連型はコンマで区切られる。リスト内の各主要関連型は、既存の構文のプロトコル本文の関連型宣言にも記載するか、継承していなければならない。正式な文法は次のように修正され、オプションの主要関連型プリストの生成がプロトコル宣言に追加される。
 
 - protocol-declaration → attributes<sub>opt</sub> access-level-modifier<sub>opt</sub> `protocol` protocol-name primary-associated-type-list<sub>opt</sub> type-inheritance-clause<sub>opt</sub> generic-where-clause<sub>opt</sub> protocol-body
-- primary-associated-type-list → `<` primary-associated-type | primary-associated-type `,` primary-associated-type-list `>`
-- primary-associated-type → type-name typealias-assignment<sub>opt</sub>
-- primary-associated-type → type-name `:` type-identifier typealias-assignment<sub>opt</sub>
-- primary-associated-type → type-name `:` protocol-composition-type default-witness<sub>opt</sub>
-- default-witness → `=` type
+- **primary-associated-type-list** → `<` primary-associated-type-entry `>`
+- **primary-associated-type-list** → `<` primary-associated-type | primary-associated-type `,` primary-associated-type-entry `>`
+- **primary-associated-type** → type-name
 
 いくつかの例:
 
 ```swift
 protocol SetProtocol<Element: Hashable> {
+    associatedtype Element : Hashable
     ...
 }
 
-protocol PersistentSortedMap<Key: Comparable & Codable, Value : Codable> {
-    ...
+protocol SortedMap {
+    associatedtype Key
+    associatedtype Value
+}
+
+// 主要な関連のKeyとValueは継承したSortedMapの中で宣言されている
+protocol PersistentSortedMap<Key, Value> : SortedMap {
 }
 ```
 
@@ -158,21 +164,13 @@ protocol PersistentSortedMap<Key: Comparable & Codable, Value : Codable> {
 protocol GraphProtocol<Vertex: Equatable = String> {}
 ```
 
-主要な関連型の追加要件は、プロトコルまたは別の関連型の`where`句を使用して記述できる。継承句のシンタックスは、次のようになる:
-
-```swift
-protocol SetProtocol<Element> where Element: Hashable {
-    ...
-}
-```
-
-利用側では、*制約付きプロトコル*は、`P<Arg1、Arg2...>`のような一つ以上の型パラメータを使用して記述できるようになった。主要な関連型の数よりも少ない数でもOK。後続の主要な関連型は制約されない。主要な関連型リストをプロトコルに追加することは、互換性のある変更。プロトコルは、以前のように山かっこなしでの参照もできる。
+利用側では、*制約付きプロトコル*は、`P<Arg1、Arg2...>`のような一つ以上の型パラメータを記述できるようになった。型パラメータのリストを完全に省略することもでき、この場合はプロトコルには何の制約もなり。主要関連型の数よりも少ないまたは多い数の型パラメータを指定すると、エラーになる。主要関連型リストをプロトコルに追加することは、ソース互換性ある変更。プロトコルは、以前のように山かっこなしでも参照できる。
 
 デフォルトの関連型は準拠に関係し、利用側からデフォルトを提供しないことに注意。例えば、上記の`GraphProtocol`では、制約型`Vertex`は`String`に制約されず、指定しないままになる。
 
 #### 糖衣シンタックスの位置で制約されたプロトコル
 
-制約されたプロトコルのシンタックスが現れる可能性のある位置の完全なリストは次の通り。最初の一連のケースでは、新しいシンタックスは主要な関連型を制約する同じ型要件を持つ既存の`where`句のシンタックスと同等。
+制約されたプロトコルのシンタックスが現れる可能性のある位置の完全なリストは次の通り。最初の一連のケースでは、新しいシンタックスは主要関連型を制約する同じ型要件を持つ既存の`where`句のシンタックスと同等。
 
 - extensionで拡張された型
 
@@ -219,12 +217,12 @@ protocol Document {
 - `where`句の準拠要件の右側
 
 ```swift
-func mergeFiles<S : Sequence>(_ files: S)
-    where S.Element : AsyncSequence<String>
+func merge<S : Sequence>(_ files: S)
+    where S.Element : Sequence<String>
 
 // 同等:
-func mergeFiles<S : Sequence>(_ files: S)
-    where S.Element : AsyncSequence, S.Element.Element == String
+func merge<S : Sequence>(_ files: S)
+    where S.Element : Sequence, S.Element.Element == String
 ```
 
 - opaqueパラメータ宣言
@@ -311,6 +309,42 @@ func takeEquatableSequence(_ seqs: some Sequence<Int> & Equatable)
 
 ### その他の代替案
 
+#### 主要関連型リストのエントリを宣言として扱う
+
+このプロポーザルの以前のリビジョンでは、主要関連型関リストのエントリは、本文で宣言された関連型に名前を付ける代わりに、新しい関連型を宣言していた。つまり、このように書けた:
+
+```swift
+protocol SetProtocol<Key> {
+    associatedtype Key : Hashable
+    ...
+}
+```
+
+の代わりに
+
+```swift
+protocol SetProtocol<Key : Hashable> {
+    ...
+}
+```
+
+主要関連型リストで関連型の宣言を許可すると、重要な点で意味的に異なる場合に、ここで実際に行われているのはジェネリックの宣言であるという混乱を招くと感じた。もう1つの潜在的な混乱の原因は、主要関連型がデフォルト型を宣言していた場合:
+
+```swift
+protocol SetProtocol<Key: Hashable = String> {
+    ...
+}
+```
+
+これは、「デフォルトジェネリックパラメータ」のように見えるが、そうではない。`SetProtocol`を書くことは、`Key`を制約なしのままにすることを意味し、`SetProtocol<Int>`と同じではない。現在提案されている形式は、ここで行われているのが利用側のジェネリック制約ではなく、プロトコル準拠にデフォルトが宣言されていることをより明確にする:
+
+```swift
+protocol SetProtocol<Key> {
+    associatedtype Key : Hashable = String
+    ...
+}
+```
+
 #### 関連型の名前を必須にする 例: Collection<.Element == String>
 
 関連型名を明示的に山かっこ内に書いて制約するといくつかの利点がある
@@ -321,7 +355,7 @@ func takeEquatableSequence(_ seqs: some Sequence<Int> & Equatable)
 このアプローチにはいくつかの欠点もある:
 
 - プロトコルの宣言に関連型に関する視覚的な手がかりがない
-- 利用側はうんざりするかもしれない。一つのみの主要な関連型を持つプロトコルの場合、その名前を指定の強制が不必要に繰り返される
+- 利用側はうんざりするかもしれない。一つのみの主要関連型を持つプロトコルの場合、その名前を指定の強制が不必要に繰り返される
 - 制約付き関連型が宣言のジェネリックパラメータと同じ名前を持つ場合、シンタックスは混乱を招く可能性がある。例えば、次のように:
 
 ```swift
@@ -346,33 +380,34 @@ func adjacentPairs<Element>(_: some Sequence<Element>,
 
 #### 最初にopaque result type要件のよりジェネリックなシンタックスを実装
 
-前述のように、opaque result typeの場合、主要な関連型の同じ型要件を記述できる`where`句を含めることができないため、このプロポーザルは新しい表現力を導入している。
+前述のように、opaque result typeの場合、主要関連型の同じ型要件を記述できる`where`句を含めることができないため、このプロポーザルは新しい表現力を導入している。
 
 最初に、opaque result typeの汎用的な要件を可能にする言語機能を導入することも可能。可能性の1つとしては、「名前付きopaque result type」。これは、`where`句で要件を設定することができる。
 
 ```swift
-func readLines(_ file: String) -> some AsyncSequence<String> { ... }
+func readLines(_ file: String) -> some Sequence<String> { ... }
 
 // 同等:
 func readLines(_ file: String) -> <S> S
-  where S : AsyncSequence, S.Element == String { ... }
+  where S : Sequence, S.Element == String { ... }
 ```
 
-ただし、このプロポーザルの目的は、具象型とジェネリクスの間に対称性を導入することでジェネリクスをより親しみやすくし、ジェネリクスを他の言語のプログラマがすでに慣れ親しんでいる汎用化のように感じさせること。
+ただし、このプロポーザルの目的は、具象型とジェネリクスの間に対称性を導入することでジェネリクスをよりわかりやすくし、ジェネリクスを他の言語のプログラマがすでに慣れ親しんでいる汎用化の方法と同じように感じさせること。
 
 opaque result typeのよりジェネリックなシンタックスは、それ自体メリットと見なすことができる。前のセクションで説明した`some Collection<.Element == Int>`シンタックスと同様に、このプロポーザルでは、将来opaque result typeをさらに汎用化することを妨げるものはない。
 
-### 通常のassociatedtype宣言に主要な関連型のアノテーションを付ける
+### 通常のassociatedtype宣言に主要関連型のアノテーションを付ける
 
-ある種の修飾子を`associatedtype`宣言に追加すると、これは、ジェネリック型がパラメータを宣言する方法ともまた異なるため、段階的開示の原則に反し、APIの利用者の複雑さが増す。また、このプロポーザルを複数の主要な関連型を一般化するようにした場合、将来的には、利用側で主要な関連型の宣言順序を理解する必要がある。
+ある種の修飾子を`associatedtype`宣言に追加すると、これは、ジェネリック型がパラメータを宣言する方法ともまた異なるため、段階的開示の原則に反し、APIの利用者の複雑さが増す。また、このプロポーザルを複数の主要関連型を一般化するようにした場合、将来的には、利用側で主要関連型の宣言順序を理解する必要がある。
 
 また、プロトコル定義のメンバには現在当てはまらない方法で、宣言の順序を重大なものにしてしまう。
 
-関連型宣言にアノテーションを付けると、新しいコンパイラバージョンでのみ主要な関連型を定義するプロトコルを条件付きで宣言するのが簡単になる。このプロポーザルで説明されているシンタックスは、プロトコル宣言自体に適用され、結果として、下位互換性のある方法でこの機能を採用したいライブラリは、`#if`ブロックの背後にあるプロトコル定義全体を複製する必要がある:
+関連型宣言にアノテーションを付けると、新しいコンパイラバージョンでのみ主要関連型を定義するプロトコルを条件付きで宣言するのが簡単になる。このプロポーザルで説明されているシンタックスは、プロトコル宣言自体に適用され、結果として、下位互換性のある方法でこの機能を採用したいライブラリは、`#if`ブロックの背後にあるプロトコル定義全体を複製する必要がある:
 
 ```swift
 #if swift(>=5.7)
-protocol SetProtocol<Element : Hashable> {
+protocol SetProtocol<Element> {
+    associatedtype Element : Hashable
     var count: Int { get }
     ...
 }
@@ -402,9 +437,11 @@ protocol SetProtocol {
 
 ただし、この方法で関連型宣言を複製することは、依然としてエラーが発生しやすい形式のコード複製で、コードが読みにくくなる。このユースケースは、言語シンタックスの進化を不必要に妨げるものであってはならないと私たちは感じている。古いコンパイラとの互換性を維持しながら新しい言語機能を採用するライブラリの懸念は、このプロポーザルに固有のものではなく、サードパーティのプリプロセッサツールを使用して対処するのが最適。
 
+現在提案されている構文では、プリプロセッサがプロトコル名の後の山かっこの間のすべてを取り除き、下位互換性のある宣言を生成するには十分。このようなプリプロセッサの最小限の実装は、単純な`sed`呼び出し。`sed -e 's/\(protocol .*\)<.*> {/\1 {/'`。
+
 #### ジェネリックプロトコル(Generic protocols)
 
-このプロポーザルでは、Haskellのマルチパラメータ型クラスまたはRustのジェネリック特性をモデルにした架空の「ジェネリックプロトコル」機能の代わりに、主要な関連型を制約するために山かっこシンタックスを使用する。 このような「ジェネリックプロトコル」は、単一の`Self`準拠型だけでなく、複数の型にわたってパラメータ化できるという考え方である:
+このプロポーザルでは、Haskellのマルチパラメータ型クラスまたはRustのジェネリック特性をモデルにした架空の「ジェネリックプロトコル」機能の代わりに、主要関連型を制約するために山かっこシンタックスを使用する。 このような「ジェネリックプロトコル」は、単一の`Self`準拠型だけでなく、複数の型にわたってパラメータ化できるという考え方である:
 
 ```swift
 protocol ConvertibleTo<Other> {
@@ -420,7 +457,7 @@ extension String : ConvertibleTo<Double> {
 }
 ```
 
-主要な関連型の制約は、ジェネリックプロトコルよりも汎用的に有用な機能で、主要な関連型の制約に山かっこシンタックスを使用すると、`Array<Int>`と`Collection<Int>`の明確な類似性により、ユーザが一般的に期待するものが得られると考えている。
+主要関連型の制約は、ジェネリックプロトコルよりも汎用的に有用な機能で、主要関連型の制約に山かっこシンタックスを使用すると、`Array<Int>`と`Collection<Int>`の明確な類似性により、ユーザが一般的に期待するものが得られると考えている。
 
 このプロポーザル提案には、将来、異なるシンタックスでジェネリックプロトコルを導入することを妨げるものはない。おそらく、関連型の場合のように、型パラメータ間に機能依存性(functional dependency)がないことを明確にするために、`Self`型を他の型よりも優先しないものになる:
 
@@ -440,7 +477,7 @@ extension Convertible(from: String, to: Double) {
 
 ### ソース互換性
 
-このプロポーザルは、既存のソースの互換性に影響を与えない。この機能を採用するプロトコルの場合、主要な関連型を削除または変更することは、クライアントにとって重大な変更になる。
+このプロポーザルは、既存のソースの互換性に影響を与えない。この機能を採用するプロトコルの場合、主要関連型を削除または変更することは、クライアントにとって重大な変更になる。
 
 ### ABIの安定性への影響
 
@@ -448,13 +485,13 @@ extension Convertible(from: String, to: Double) {
 
 ### APIのレジリエンスへの影響
 
-この変更は、APIのレジリエンスには影響しない。この機能を採用するプロトコルの場合、主要な関連型リストの追加または削除はバイナリ間で互換可能な変更である。主要な関連型リストの変更または削除もバイナリ間で互換可能な変更だが、ソースを壊すため推奨されない。
+この変更は、APIのレジリエンスには影響しない。この機能を採用するプロトコルの場合、主要関連型リストの追加または削除はバイナリ間で互換可能な変更である。主要関連型リストの変更または削除もバイナリ間で互換可能な変更だが、ソースを壊すため推奨されない。
 
 ### 将来の検討事項
 
 #### 標準ライブラリへの導入
 
-標準ライブラリで主要な関連型を実際に採用することは、このプロポーザルの範囲外。`Sequence`や`Collection`などの明らかな候補があるが、追加の議論が必要になることは間違いない。
+標準ライブラリで主要関連型を実際に採用することは、このプロポーザルの範囲外。`Sequence`や`Collection`などの明らかな候補があるが、追加の議論が必要になることは間違いない。
 
 #### 制約付き存在型
 
@@ -467,10 +504,13 @@ extension Convertible(from: String, to: Double) {
 - [[Pitch] Light-weight same-type requirement syntax](https://forums.swift.org/t/pitch-light-weight-same-type-constraint-syntax/52889)
 - [[Pitch 2] Light-weight same-type requirement syntax](https://forums.swift.org/t/pitch-2-light-weight-same-type-requirement-syntax/55081)
 - [SE-0346: Lightweight same-type requirements for primary associated types](https://forums.swift.org/t/se-0346-lightweight-same-type-requirements-for-primary-associated-types/55869)
+- [SE-0346 (second review): Lightweight same-type requirements for primary associated types](https://forums.swift.org/t/se-0346-second-review-lightweight-same-type-requirements-for-primary-associated-types/56414)
 - [Improving the UI of generics](https://forums.swift.org/t/improving-the-ui-of-generics/22814#heading--directly-expressing-constraints)
 - [New syntax for declaring primary associated types](https://github.com/apple/swift/pull/41640)
+- [[Pitch] Primary Associated Types in the Standard Library](https://forums.swift.org/t/pitch-primary-associated-types-in-the-standard-library/56426)
 
 
 ### プロポーザルドキュメント
 
 - [Lightweight same-type requirements for primary associated types](https://github.com/apple/swift-evolution/blob/main/proposals/0346-light-weight-same-type-syntax.md#require-associated-type-names-eg-collectionelement--string)
+- [](https://github.com/lorentey/swift-evolution/blob/stdlib-pats/proposals/nnnn-primary-associated-types-in-stdlib.md)
