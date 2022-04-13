@@ -176,6 +176,18 @@ extension Clock {
 }
 ```
 
+※ [Amend SE-0329 to add Clock.Duration](https://github.com/apple/swift-evolution/pull/1618)で`associatedtype`に`Duration`が追加になりました。これはprimary associated typeとして使用したいということが主な動機だそうです(これに関しては別エピソードで紹介)。
+
+```swift
+public protocol Clock: Sendable {
+    associatedtype Duration: DurationProtocol
+    associatedtype Instant: InstantProtocol where Instant.Duration == Duration
+    ...
+}
+```
+
+
+
 `associatedtype`に、ある時刻を表す`InstantProtocol`プロトコル(後述)に準拠した型を持つので、時計と時刻は紐づいている。例えば、特定の時計の時刻と他のすべての時計の時刻を比較することはできない。ただし、既存のAPIと新しいAPI間のやり取りをスムーズにするためや、使いやすさという点を考慮して、2つの時刻間の期間は比較することができるようになっている。ただし、時計を跨るので間違って使わないように注意する必要がある。プロトコル階層を時計と時刻だけにすることで、すべての場合で利用可能な期間を簡潔な形式で簡単に表現できる。これは特に既存の型の代わりに期間の概念を定義した型を利用する可能性のあるAPIの場合に有用である。
 
 時計の精度を調整することもできる。ある時計はナノ秒単位の精度を持つし、ある時計はマイクロ秒単位での精度を持つ。デフォルトは1ナノ秒(`.nanosecond(1)`)。経過時間が指定している精度以下の場合は、正確な情報を提供できない。
