@@ -1,6 +1,6 @@
-# Swift Primary associated types プロトコルに準拠するための軽量な構文
+# Swift Primary associated types プロトコルの関連型を制約する同型要件の軽量構文
 
-- [Swift Primary associated types プロトコルに準拠するための軽量な構文](#swift-primary-associated-types-プロトコルに準拠するための軽量な構文)
+- [Swift Primary associated types プロトコルの関連型を制約する同型要件の軽量構文](#swift-primary-associated-types-プロトコルの関連型を制約する同型要件の軽量構文)
   - [概要](#概要)
   - [内容](#内容)
     - [問題点](#問題点)
@@ -28,9 +28,9 @@
 
 ## 概要
 
-[Improving the UI of generics](https://forums.swift.org/t/improving-the-ui-of-generics/22814#heading--directly-expressing-constraints)を実現するためのステップとして、このプロポーザルではジェネリックパラメータに準拠し、同じ型要件(※)が必要な関連型(associated type)を制約するための新しい構文を導入する。
+[Improving the UI of generics](https://forums.swift.org/t/improving-the-ui-of-generics/22814#heading--directly-expressing-constraints)を実現するためのステップとして、このプロポーザルではジェネリックパラメータに準拠し、同型要件(※)を介して関連型(associatedtype)を制約するための新しい構文を導入する。
 
-※ 同じ型要件とは以下のようなものを指す
+※ 同型要件とは以下のようなものを指す
 
 ```swift
 Collection where Element == String
@@ -91,11 +91,11 @@ func concatenate<S : Sequence>(_ lhs: S, _ rhs: S) -> S where S.Element == Strin
 }
 ```
 
-この`where`句はジェネリックで複雑な制約を設定できるが、`Array<String>`の場合の具体的な型でのシンプルな実装と比べると、かなり形が異なり、これを読み書きする際には理解するのにおそらく苦労する。こういった場合に同じ型要件を具体的な型と同じように書ける方法があればうれしい。
+この`where`句はジェネリックで複雑な制約を設定できるが、`Array<String>`の場合の具体的な型でのシンプルな実装と比べると、かなり形が異なり、これを読み書きする際には理解するのにおそらく苦労する。こういった場合に同型要件を具体的な型と同じように書ける方法があればうれしい。
 
 ### 解決策
 
-一つ以上の同じ型要件をプロトコルの「主要関連型」(primary associated types)としてプロトコルの準拠要件と一緒に宣言できる新しい構文を導入する。これはジェネリックの型パラメータに具体的な型を適用するのと似ていて、`Sequence<String>`や`Sequence<[Lines]>`のように書くことができ、`Array<String>`や`Array<[Lines]>`と同じ感覚で理解できる。
+一つ以上の同型要件をプロトコルの「主要関連型」(primary associated types)としてプロトコルの準拠要件と一緒に宣言できる新しい構文を導入する。これはジェネリックの型パラメータに具体的な型を適用するのと似ていて、`Sequence<String>`や`Sequence<[Lines]>`のように書くことができ、`Array<String>`や`Array<[Lines]>`と同じ感覚で理解できる。
 
 プロトコルにジェネリックパラメータのリストに似た構文で一つ以上の関連型を宣言できる:
 
@@ -166,7 +166,7 @@ protocol PersistentSortedMap<Key, Value> : SortedMap {
 
 #### 糖衣構文(シンタックスシュガー)内での条件付きプロトコル
 
-条件付きプロトコルの構文が存在する可能性のある位置の完全なリストは次の通り。最初の一連のケースでは、新しい構文は主要関連型を制約する同じ型要件を持つ既存の`where`句の構文と等しい。
+条件付きプロトコルの構文が存在する可能性のある位置の完全なリストは次の通り。最初の一連のケースでは、新しい構文は主要関連型を制約する同型要件を持つ既存の`where`句の構文と等しい。
 
 - extensionで拡張された型
 
@@ -244,7 +244,7 @@ func sort<C: Collection, E: Equatable>(elements: inout C)
     where C.Element == E
 ```
 
-上記のうちのいずれかの位置から参照されている場合、準拠要件の`T: P<Arg1, Arg2...>`は一つ以上の同じ型要件が続く`T: P`という準拠要件に分解される
+上記のうちのいずれかの位置から参照されている場合、準拠要件の`T: P<Arg1, Arg2...>`は一つ以上の同型要件が続く`T: P`という準拠要件に分解される
 
 ```swift
 T: P
@@ -253,7 +253,7 @@ T.PrimaryType2 == Arg2
 ...
 ```
 
-右側の`Arg1`がOpaqueパラメータ宣言の場合、同じ型要件の右側で使用できるようにするために、新しいジェネリックパラメータが導入された。詳細は[SE-0341 Opaque Parameter Declarations](https://github.com/apple/swift-evolution/blob/main/proposals/0341-opaque-parameters.md)
+右側の`Arg1`がOpaqueパラメータ宣言の場合、同型要件の右側で使用できるようにするために、新しいジェネリックパラメータが導入された。詳細は[SE-0341 Opaque Parameter Declarations](https://github.com/apple/swift-evolution/blob/main/proposals/0341-opaque-parameters.md)
 
 #### Opaque Result Typeの条件付きプロトコル
 
@@ -376,7 +376,7 @@ func adjacentPairs<Element>(_: some Sequence<Element>,
 
 #### 最初にOpaque Result Type要件のよりジェネリックな構文を実装
 
-前述のように、Opaque Result Typeの場合、主要関連型の同じ型要件を記述できる`where`句を含めることができないため、このプロポーザルは新しい表現を導入している。
+前述のように、Opaque Result Typeの場合、主要関連型の同型要件を記述できる`where`句を含めることができないため、このプロポーザルは新しい表現を導入している。
 
 最初に、Opaque Result Typeの汎用的な要件を可能にする言語機能を導入することも可能。可能性の一つとしては、「名前付きOpaque Result Type」。これは、`where`句で要件を設定することができる。
 
