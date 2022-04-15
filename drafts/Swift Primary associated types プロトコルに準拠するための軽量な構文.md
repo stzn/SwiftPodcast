@@ -1,6 +1,6 @@
-# Swift Primary associated types プロトコルの関連型の同じ型の要件を宣言する新しい構文
+# Swift Primary associated types プロトコルに準拠するための軽量な構文
 
-- [Swift Primary associated types プロトコルの関連型の同じ型の要件を宣言する新しい構文](#swift-primary-associated-types-プロトコルの関連型の同じ型の要件を宣言する新しい構文)
+- [Swift Primary associated types プロトコルに準拠するための軽量な構文](#swift-primary-associated-types-プロトコルに準拠するための軽量な構文)
   - [概要](#概要)
   - [内容](#内容)
     - [問題点](#問題点)
