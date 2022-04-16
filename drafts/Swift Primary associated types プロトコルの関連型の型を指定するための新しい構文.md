@@ -273,7 +273,7 @@ func transform(_: some Sequence<some Equatable>) -> some Sequence<some Equatable
 
 #### 他に使える位置
 
-条件付きプロトコルが表示される可能性がある3つの場所がある:
+他にも条件付きプロトコルが出てくる可能性がある箇所が3つある:
 
 - 具体型の継承句
 
@@ -524,3 +524,4 @@ extension Convertible(from: String, to: Double) {
 
 - [Lightweight same-type requirements for primary associated types](https://github.com/apple/swift-evolution/blob/main/proposals/0346-light-weight-same-type-syntax.md#require-associated-type-names-eg-collectionelement--string)
 - [Primary Associated Types in the Standard Library](https://github.com/lorentey/swift-evolution/blob/stdlib-pats/proposals/nnnn-primary-associated-types-in-stdlib.md)
+- [Amend SE-0329 to add Clock.Duration](https://github.com/apple/swift-evolution/pull/1618)
