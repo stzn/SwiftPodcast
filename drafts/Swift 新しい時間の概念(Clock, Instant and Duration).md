@@ -3,8 +3,7 @@
 - [Swift 新しい時間の概念(Clock, Instant and Duration)](#swift-新しい時間の概念clock-instant-and-duration)
   - [概要](#概要)
   - [用語紹介](#用語紹介)
-  - [概要](#概要-1)
-    - [時間の3つの概念](#時間の3つの概念)
+  - [時間の3つの概念](#時間の3つの概念)
   - [内容](#内容)
     - [時間を扱う方法を定義するために考慮が必要なこと](#時間を扱う方法を定義するために考慮が必要なこと)
       - [APIは適切な型のみを扱えるようにする](#apiは適切な型のみを扱えるようにする)
@@ -21,8 +20,8 @@
       - [Rust](#rust)
       - [Kotlin](#kotlin)
     - [提案の詳細](#提案の詳細)
-      - [時計](#時計)
-      - [時刻](#時刻)
+      - [Clock(時計)](#clock時計)
+      - [InstantProtocol(時刻)](#instantprotocol時刻)
       - [DurationProtocol](#durationprotocol)
       - [Duration構造体](#duration構造体)
     - [Clockプロトコルの具体的な実装](#clockプロトコルの具体的な実装)
@@ -60,9 +59,7 @@
 
 ドキュメントの末尾にも用語の一覧が記載されている[付録](#付録)
 
-## 概要
-
-### 時間の3つの概念
+## 時間の3つの概念
 
 1. 「今」の概念を提供するアイテムとある時点で目覚める方法(= 時計 clockと呼ばれる)
 2. ある時点を表す概念(= 時刻 instantと呼ばれる)
@@ -151,7 +148,7 @@ Kotlinは、`Duration`を`Long`に加えて、ミリ秒またはナノ秒で構�
 
 ### 提案の詳細
 
-#### 時計
+#### Clock(時計)
 
 2つの基本的な要件がある
 
@@ -209,7 +206,7 @@ func delayedHello() async throws {
 
 上記の例では、時計は呼び出された瞬間から3秒までスリープされ、その後出力される。スリープ機能が一時停止されている間にタスクがキャンセルされた場合、`sleep`はエラースローする。この例では、許容値はデフォルトで時計によって`nil`に設定され、期限に適用できる許容値の「ディーラの選択」(システム依存)として残されている。
 
-#### 時刻
+#### InstantProtocol(時刻)
 
 前述したように、比較できる(`Comparable`)かつ`Key`として保存できる(`Hashable`)必要だが、今という概念と与えられた期間分の時間を進める方法のみを定義すれば良い。
 
@@ -684,6 +681,8 @@ https://forums.swift.org/t/se-0329-third-review-clock-instant-and-duration/54727
 
 - [Clock, Instant, and Duration](https://github.com/apple/swift-evolution/blob/main/proposals/0329-clock-instant-duration.md)
 - [[Accepted] SE-0329: Clock, Instant, and Duration](https://forums.swift.org/t/accepted-se-0329-clock-instant-and-duration/55324)
+
+- [Amend SE-0329 to add Clock.Duration](https://github.com/apple/swift-evolution/pull/1618)
 
 ### 関連PR
 
