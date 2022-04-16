@@ -1,6 +1,6 @@
-# Swift Primary associated types プロトコルの関連型を制約する同型要件の軽量構文
+# Swift Primary associated types プロトコルの関連型の型を指定するための新しい構文
 
-- [Swift Primary associated types プロトコルの関連型を制約する同型要件の軽量構文](#swift-primary-associated-types-プロトコルの関連型を制約する同型要件の軽量構文)
+- [Swift Primary associated types プロトコルの関連型の型を指定するための新しい構文](#swift-primary-associated-types-プロトコルの関連型の型を指定するための新しい構文)
   - [概要](#概要)
   - [内容](#内容)
     - [問題点](#問題点)
@@ -113,7 +113,7 @@ protocol DictionaryProtocol<Key : Hashable, Value> {
 }
 ```
 
-主要関連型を持つプロトコルは、プロトコル準拠要件をこれまで書くことができた場所ならばどこでも、山かっこ(`<>`)で囲まれた型パラメータリストを使用して同じように書くことができる。
+主要関連型を持つプロトコルは、プロトコルへの準拠要件をこれまで書くことができた場所ならばどこでも、山かっこ(`<>`)で囲まれた型パラメータリストを使用して同じように書くことができる。
 
 例えば、Opaque Result Typeを主要関連型を制約できるようになった:
 
@@ -160,9 +160,7 @@ protocol PersistentSortedMap<Key, Value> : SortedMap {
 }
 ```
 
-利用側では、*条件付きプロトコル*を`P<Arg1、Arg2...>`のように、一つ以上の型パラメータを使って記述できるようになった。型パラメータのリストを完全に省略することもでき、この場合はプロトコルには何の制約もない。主要関連型の数よりも少ないまたは多い数の型パラメータを指定すると、エラーになる。主要関連型リストをプロトコルに追加することは、ソース互換性ある変更である。プロトコルは、以前のように山かっこなしでも参照できる。
-
-デフォルトの関連型は準拠に関係し、利用側からデフォルトを提供しないことに注意。例えば、上記の`GraphProtocol`では、制約型`Vertex`は`String`に制約されず、指定しないままになる。
+利用側では、*条件付きプロトコル*を`P<Arg1、Arg2...>`のように、一つ以上の型パラメータを使って記述できるようになった。型パラメータのリストを完全に省略することができ、この場合はプロトコルには何の制約もない。主要関連型の数よりも少ないまたは多い数の型パラメータを指定するとエラーになる。制約を付けない状態では、プロトコルは以前のように山かっこなしでも参照できるため、主要関連型リストをプロトコルに追加してもソース互換性のある変更である。なぜならな
 
 #### 糖衣構文(シンタックスシュガー)内での条件付きプロトコル
 
@@ -257,15 +255,15 @@ T.PrimaryType2 == Arg2
 
 #### Opaque Result Typeの条件付きプロトコル
 
-条件付きプロトコルは`some`で特定されるOpaque Result Typeで表示される可能性がある。以前はOpaque Result Typeに`where`句を書くことができなかったためにこういったケースを書くことができなかったがレグアール、これができるようになる:
+条件付きプロトコルは`some`で特定されるOpaque Result Typeで表示される可能性がある。以前はOpaque Result Typeに`where`句を書くことができなかったためにこういったケースを書くことができなかったが、これができるようになる:
 
 ```swift
 func transformElements<S: Sequence<E>, E>(_ lines: S) -> some Sequence<E>
 ```
 
-この例では、引数が外部スコープからのジェネリックパラメータに依存できることを示している。
+この例では、Opaque Result Typeのパラメータが外部スコープから指定されたジェネリックパラメータに依存できることも示している。
 
-[SE-0328 Structural Opaque Result Types](https://github.com/apple/swift-evolution/blob/main/proposals/0328-structural-opaque-result-types.md)で、戻り値に複数の`some`を使うことができるようになった。これは条件付きプロトコル型に汎用的に使用可能にし、その制約は別のOpaque Result Typeになる可能性がある:
+[SE-0328 Structural Opaque Result Types](https://github.com/apple/swift-evolution/blob/main/proposals/0328-structural-opaque-result-types.md)で、戻り値に複数の`some`を使うことができるようになった。これは条件付きプロトコル型を汎用的に使用可能にし、その制約は別のOpaque Result Typeになる可能性がある:
 
 ```swift
 func transform(_: some Sequence<some Equatable>) -> some Sequence<some Equatable>
