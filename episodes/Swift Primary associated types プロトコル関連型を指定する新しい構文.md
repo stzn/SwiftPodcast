@@ -1,6 +1,8 @@
-# Swift Primary associated types プロトコル関連型の型を指定する新しい構文
+# Swift Primary associated types プロトコル関連型を指定する新しい構文
 
-- [Swift Primary associated types プロトコル関連型の型を指定する新しい構文](#swift-primary-associated-types-プロトコル関連型の型を指定する新しい構文)
+収録日: 2022/04/16
+
+- [Swift Primary associated types プロトコル関連型を指定する新しい構文](#swift-primary-associated-types-プロトコル関連型を指定する新しい構文)
   - [概要](#概要)
   - [内容](#内容)
     - [問題点](#問題点)
