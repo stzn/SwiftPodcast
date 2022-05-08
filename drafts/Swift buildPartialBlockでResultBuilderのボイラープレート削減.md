@@ -9,7 +9,7 @@
   - [詳細](#詳細)
   - [ソース互換性](#ソース互換性)
   - [検討された代替案](#検討された代替案)
-    - [buildPartialBlockよりも実行可能なbuildBlockオーバーロードを優先する](#buildpartialblockよりも実行可能なbuildblockオーバーロードを優先する)
+    - [buildPartialBlockよりも実行可能なbuildBlockのオーバーロードを優先する](#buildpartialblockよりも実行可能なbuildblockのオーバーロードを優先する)
     - [引数なしbuildPartialBlock()を使用して初期値を形成](#引数なしbuildpartialblockを使用して初期値を形成)
     - [Variadic genericsへの依存](#variadic-genericsへの依存)
     - [別名](#別名)
@@ -52,7 +52,7 @@ enum Builder {
 }
 
 // 変換後
-// 注: buildFinalResultとbuildExpressionは現在と同じで定義された場合のみ呼び出される
+// 注: buildFinalResultとbuildExpressionは現在と同じで定義されていた場合にのみ呼び出される
 {
     let e1 = Builder.buildExpression(expr1)
     let e2 = Builder.buildExpression(expr2)
@@ -64,7 +64,7 @@ enum Builder {
 }
 ```
 
-このプロポーザルの主な目的は、複数のbuildBlockのオーバーロードによって引き起こされるコードの膨張を減らし、ライブラリがbuilderベースの汎用DSLを楽に簡単に定義できるようにすること。
+このプロポーザルの主な目的は、複数の`buildBlock`のオーバーロードによって引き起こされるコードの膨張を減らし、ライブラリがbuilderベースの汎用DSLを楽に簡単に定義できるようにすること。
 
 ## 内容
 
@@ -158,13 +158,13 @@ enum RegexComponentBuilder {
 }
 ```
 
-ここでは、各引数の個数のすべてのタプルの組み合わせに対してオーバーロードする必要があります...これは、buildBlockオーバーロードの`O(arity!)`の組み合わせの爆発。これらのメソッドを単独でコンパイルすると、数時間かかる場合がある。
+ここでは、各引数の個数のすべてのタプルの組み合わせに対してオーバーロードする必要がある。これは、buildBlockオーバーロードの`O(arity!)`の組み合わせの爆発が発生しており、これらのメソッドを単独でコンパイルすると、数時間かかる場合がある。
 
 ### 解決策
 
-この提案では、異なる種類のリストの作成に似た新しいブロック作成アプローチを導入する。このアプローチでは、単一のメソッドを呼び出してブロック全体を大規模に構築する代わりに、一度に1つの新しいコンポーネントを取得することで部分的なブロックを再帰的に構築するため、オーバーロードの数を大幅に減らすことができる。
+このプロポーザルでは、異なる種類のリストの作成に似た新しいブロック作成アプローチを導入する。このアプローチでは、単一のメソッドを呼び出してブロック全体を大規模に構築する代わりに、一度に1つの新しいコンポーネントを取得することで部分的なブロックを再帰的に構築するため、オーバーロードの数を大幅に減らすことができる。
 
-2つのユーザ定義のstaticメソッドを介してresult builderに新しいカスタマイズポイントを導入する:
+具体的には、2つのユーザ定義のstaticメソッドを介してresult builderに新しいカスタマイズポイントを導入する:
 
 ```swift
 @resultBuilder
@@ -176,7 +176,7 @@ enum Builder {
 
 `buildPartialBlock(first:)`と`buildPartialBlock(accumulated:next:)`の両方が定義されている場合、result builder変換は、ブロック内のコンポーネントを`buildPartialBlock`への一連の呼び出しに変換し、コンポーネントを上から下に結合する。
 
-このアプローチを使用すると、`buildBlock`がオーバーロードされた多くのresult builder型を簡略化できる。例えば、SwiftUIの`SceneBuilder`の`buildBlock`オーバーロードは、次のように簡略化できる。
+このアプローチを使用すると、オーバーロードされた`buildBlock`　を使った多くのresult builder型を簡単にできる。例えば、SwiftUIの`SceneBuilder`の`buildBlock`オーバーロードは、次のように簡単にできる。
 
 ```swift
 extension SceneBuilder {
@@ -186,7 +186,6 @@ extension SceneBuilder {
 ```
 
 同様に、`RegexComponentBuilder`の`buildBlock`のオーバーロードは、`O(arity!)`から`buildPartialBlock(accumulated:next:)`の`O(arity^2)`オーバーロードまで大幅に減らすことができる。引数の個数がが10の場合、300万を超えるオーバーロードと比較すると、100のオーバーロードはとても楽:
-
 
 ```swift
 extension RegexComponentBuilder {
@@ -208,7 +207,7 @@ extension RegexComponentBuilder {
 
 ## 詳細
 
-型が`@resultBuilder`でマークされている場合、その型には以前は少なくとも1つのstatic `buildBlock`メソッドが必要だった。この提案では、このような型には、少なくとも1つのstatic `buildBlock`メソッド、または`buildPartialBlock(first:)`と`buildPartialBlock(accumulated:next:)`の両方が必要になる。
+型が`@resultBuilder`でマークされている場合、その型には以前は少なくとも1つのstatic `buildBlock`メソッドが必要だった。このプロポーザルでは、このような型には、少なくとも1つのstatic `buildBlock`メソッド、または`buildPartialBlock(first:)`と`buildPartialBlock(accumulated:next:)`の両方が必要になる。
 
 Result builder変換では、コンパイラはbuilder型のstaticメンバ`buildPartialBlock(first:)`および`buildPartialBlock(accumulated:next:)`を次の条件が満たされている場合に検索する:
 
@@ -247,17 +246,17 @@ Result builder変換では、コンパイラはbuilder型のstaticメンバ`buil
 
 ## 検討された代替案
 
-### buildPartialBlockよりも実行可能なbuildBlockオーバーロードを優先する
+### buildPartialBlockよりも実行可能なbuildBlockのオーバーロードを優先する
 
-提案されているように、result builder変換は、両方が定義されている場合、`buildBlock`よりも`buildPartialBlock`を常に優先する。`buildBlock`の実行可能なオーバーロードを1回呼び出すだけで、より効率的にカスタマイズできると主張する人もいるかもしれない。 ただし、result builder変換は、現在型推論が完了する前に動作するため、引数の型に基づいて`buildBlock`または`buildPairwiseBlock`を呼び出すことを決定するための型チェックの複雑さが増す。result builder変換によって変換される際、result builderの内部要件(`buildBlock`、`buildOptional`など)は、引数の型に依存しない。
+提案されているように、result builder変換は、両方が定義されている場合、`buildBlock`よりも`buildPartialBlock`を常に優先する。`buildBlock`の実行可能なオーバーロードを1回呼び出すだけで、より効率的にカスタマイズできると主張する人もいるかもしれない。 ただし、result builder変換は、現在型推論が完了する前に動作するため、引数の型に基づいて`buildBlock`または`buildPartialBlock`を呼び出すことを決定するための型チェックの複雑さが増す。result builder変換によって変換される際、result builderの内部要件(`buildBlock`、`buildOptional`など)は、引数の型に依存しない。
 
 ### 引数なしbuildPartialBlock()を使用して初期値を形成
 
-提案されているように、result builder変換は、ブロック内の最初のコンポーネントで単項`buildPartialBlock(first;)`を呼び出してから、残りのコンポーネントで`buildPartialBlock(accumulated:next:)`を呼びす。初期の結果を形成するために引数なし`buildPartialBlock()`メソッドを定義するようにユーザに要求することは可能だが、この動作は、SwiftUIの`SceneBuilder`のように空のブロックをサポートすることを意図していないresult builderには最適ではない可能性がある。さらに、提案されたアプローチでは、ユーザが引数なし`buildPartialBlock()`を定義して、空のブロックの構築をサポートすることができる。
+提案されているように、result builder変換は、ブロック内の最初のコンポーネントで単項`buildPartialBlock(first;)`を呼び出してから、残りのコンポーネントで`buildPartialBlock(accumulated:next:)`を呼び出す。初期の結果を形成するために引数なし`buildPartialBlock()`メソッドを定義するようにユーザに要求することは可能だが、この動作は、SwiftUIの`SceneBuilder`のように空のブロックをサポートすることを意図していないresult builderには最適ではない可能性がある。さらに、提案されたアプローチでは、ユーザが引数なし`buildPartialBlock()`を定義して、空のブロックの構築をサポートすることができる。
 
 ### Variadic genericsへの依存
 
-可変個引数ジェネリック(Variadic generics)は、今回のプロポーザルを解決することができると言える。ただし、`RegexComponentBuilder`に必要な連結動作を実現するには、ネストされた型シーケンスを表現し、要素の削除やスプラッティング(※)などのジェネリックパラメータのパックで`Collection`のような変換を実行できる必要がある。
+可変個引数ジェネリック(Variadic generics)は、今回のプロポーザルを解決することができると言える。ただし、`RegexComponentBuilder`に必要な連結動作を実現するには、ネストされた型シーケンスを表現し、要素の削除やスプラッティング(※)などのジェネリックパラメータのパックで`Collection`のような変換を実行できるようにする必要がある。
 
 ※ パラメータ値のコレクションをまとめてコマンドに渡す手法
 
