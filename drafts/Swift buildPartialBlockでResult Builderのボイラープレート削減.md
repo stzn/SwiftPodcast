@@ -1,6 +1,6 @@
-# Swift buildPartialBlockでResultBuilderのボイラープレート削減
+# Swift buildPartialBlockでResult Builderのボイラープレート削減
 
-- [Swift buildPartialBlockでResultBuilderのボイラープレート削減](#swift-buildpartialblockでresultbuilderのボイラープレート削減)
+- [Swift buildPartialBlockでResult Builderのボイラープレート削減](#swift-buildpartialblockでresult-builderのボイラープレート削減)
   - [概要](#概要)
   - [内容](#内容)
     - [問題点](#問題点)
