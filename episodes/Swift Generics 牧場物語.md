@@ -35,7 +35,7 @@
   - [anyキーワードとassociatedtypeを持ったプロトコルの関係について](#anyキーワードとassociatedtypeを持ったプロトコルの関係について)
   - [すべての動物から物を生産する](#すべての動物から物を生産する)
   - [生産ポジションではassociatedtypeの制約に基づいて型の上限まで型情報を消去する(Swift5.7)](#生産ポジションではassociatedtypeの制約に基づいて型の上限まで型情報を消去するswift57)
-  - [消費ポジションではanyは使えない](#消費ポジションではanyは使えない)
+  - [消費ポジションのassociatedtypeにanyは使えない](#消費ポジションのassociatedtypeにanyは使えない)
   - [associatedtypeの型消去の挙動は既存の`Self`を返すプロトコルメソッドに似ている](#associatedtypeの型消去の挙動は既存のselfを返すプロトコルメソッドに似ている)
   - [ここまでのまとめ](#ここまでのまとめ-1)
   - [opaque result typeを使ったちょうど良いカプセル化を行う方法](#opaque-result-typeを使ったちょうど良いカプセル化を行う方法)
@@ -224,8 +224,8 @@ Swiftではプロトコルを使って、この2つの機能を持つインタ�
 
 ```swift
 protocol Animal {
-    associatedtype Feed
-    func eat(_ food: Feed)
+    associatedtype Food
+    func eat(_ food: Food)
 }
 ```
 
@@ -233,11 +233,9 @@ protocol Animal {
 
 その食べ物を食べるという行為は`eat`メソッドで表現している。引数にその動物に特定の食べ物を受け取る。`Animal`プロトコルに準拠する型はこのメソッドを実装しなければならない。
 
-※ `AnimalFeed`や`Crop`については[より応用的な例](#より応用的な例)で紹介
-
 具象型の宣言や`extension`でプロトコルへの準拠を指定できる。`class`以外にも`struct`や`enum`、`actor`にも使える。
 
-`associatedtype`のFeedは具象型のメソッドからコンパイラが推論できる。typealiasで明示的に指定もできる。
+`associatedtype`の`Food`は具象型のメソッドからコンパイラが推論できる。typealiasで明示的に指定もできる。
 
 ## Genericコードを書いてみる
 
@@ -366,9 +364,9 @@ struct Farm {
 
 ```swift
 protocol Animal {
-    associatedtype Feed
+    associatedtype Food
     associatedtype Habitat
-    func eat(_ food: Feed)
+    func eat(_ food: Food)
 }
 ```
 
@@ -625,7 +623,7 @@ struct Farm {
 
 例えば、`any Animal`が`Cow`の場合、`Cow`は`Milk`を返すが、`Milk`は`any Food`という箱の中に入っており、この`any Food`が`Animal`の`associatedtype`の`CommodityType`の上限であることはわかる。これは`Animal`に準拠するすべての型で安全に扱える。
 
-## 消費ポジションではanyは使えない
+## 消費ポジションのassociatedtypeにanyは使えない
 
 一方で、`associatedtype`がメソッドやイニシャライザの引数に現れた場合を考える。`eat`メソッドがこれに当たる。`Animal`の`associatedtype`の`FeedType`が引数の位置にあるが、これを「消費ポジション」と呼ぶ。
 
@@ -795,8 +793,8 @@ extension Farm {
 
 ```swift
 protocol Animal {
-    associatedtype FoodType: AnimalFeed
-    func eat(_: FoodType)
+    associatedtype FeedType: AnimalFeed
+    func eat(_: FeedType)
 }
 ```
 
