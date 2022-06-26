@@ -1,3 +1,6 @@
+# Swift Concurrency WWDC22
+
+- [Swift Concurrency WWDC22](#swift-concurrency-wwdc22)
 - [Swift Concurrency利用時のよくあるパフォーマンスの問題](#swift-concurrency利用時のよくあるパフォーマンスの問題)
   - [内容](#内容)
   - [Main actorブロッキング](#main-actorブロッキング)
@@ -65,6 +68,7 @@
     - [Complete mode](#complete-mode)
     - [推奨](#推奨)
 - [Swift Async Algorithm](#swift-async-algorithm)
+- [References](#references)
 
 # Swift Concurrency利用時のよくあるパフォーマンスの問題
 
@@ -1283,3 +1287,9 @@ func visit(friend: Chicken) {
 `AsyncSequence`を使いこなしてSwift Concurrencyをもっと活用する
 
 詳細はこちら[Swift Async Algorithms](./Swift%20Async%20Algorithms.md)
+
+# References
+
+[Visualize and optimize Swift concurrency](https://developer.apple.com/videos/play/wwdc2022/110350/)
+[Eliminate data races using Swift Concurrency](https://developer.apple.com/videos/play/wwdc2022/110351/)
+[Meet Swift Async Algorithms](https://developer.apple.com/videos/play/wwdc2022/110355/)
