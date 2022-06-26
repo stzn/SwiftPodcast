@@ -38,6 +38,13 @@
   - [Taskの管理](#taskの管理)
     - [Task.select](#taskselect)
   - [効果(Effects)](#効果effects)
+  - [AsyncSequence Validation](#asyncsequence-validation)
+    - [Result Builder](#result-builder)
+    - [バリデーションダイアグラム時計](#バリデーションダイアグラム時計)
+    - [Inputs](#inputs)
+    - [テーマ](#テーマ)
+    - [期待値とテスト](#期待値とテスト)
+    - [将来的な方向性/改善](#将来的な方向性改善)
   - [参考リンク](#参考リンク)
     - [Forums](#forums)
 
@@ -729,6 +736,332 @@ let allItems = await Set(items.prefix(10))
 | `AsyncZip3Sequence.Iterator`                        | rethrows     | Sendable |
 </details>
 </br>
+
+## AsyncSequence Validation
+
+https://github.com/apple/swift-async-algorithms/blob/main/Sources/AsyncSequenceValidation/AsyncSequenceValidation.docc/Validation.md
+
+テストは、パッケージを堅牢にし、バグをキャッチし、ドキュメント化された方法で期待される動作を説明するための非常に重要な領域。非同期の処理をテストすることは難しい場合があり、非同期であるものを複数回テストすることはさらに難しい場合がある。
+
+`AsyncSequence`を実装する型は、特定の入力に対して決定論的アクションで記述されることがよくある。入力の場合、イベントは離散セットとして記述できる。値、スローされるエラー、イテレータから`nil`値を返された終了状態、または時間の経過とともに何も実行しない状態。同様に、期待される出力には、値、スローされたされたエラー、イテレータから`nil`値を受け取った終了状態、または時間内に進んで何もしないという一連の個別のイベントが存在する。
+
+値のドメインスペースを`String`に制限することで、イベントをドメイン固有言語(DSL)として記述できる。モノスペース文字を使用すると、ドメインスペースを使用して、`AsyncSequence`への入力と期待される出力の両方の値を経時的に表示できる。
+
+```swift
+validate {
+    "a--b--c---|"
+    $0.inputs[0].map { $0.capitalized }
+    "A--B--C---|"
+}
+```
+
+この構文は、`XCTest`の高度な機能、同時実行ランタイム、およびresult builderのいくつかを利用することで実現できる。リストされている図は、伝播する各イベントが列に沿ったイベントフローのように流れているが、時間の経過とともに進行する式も示している。つまり、各イベントの説明。
+
+result builderを利用することにより、この同じ関数は、`merge`などをテストするための複数の入力仕様に対応できる。
+
+```swift
+validate {
+    "a-c--f-|"
+    "-b-de-g|"
+    merge($0.inputs[0], $0.inputs[1])
+    "abcdefg|"
+}
+```
+
+通常、`merge`のような関数をテストすると、限られた範囲で期待値を設定するか、本質的にはランダムになる。これらの方法は、結果が一つに定まらず、潜在的な順序に依存してしまう。ダイアグラムで定義された時間の順序を明示的に設定する方法を採用することで、テストを予測可能にする。その結果が一つに定まる理由は、入力シーケンスと期待される相関関係にある出力シーケンスに直接由来する。つまり、テストの入力と期待値の構文により、テストの信頼性を高めている。
+
+この構文はわかりやすく、読み解くことができる(したがって、カスタマイズできる)。デフォルトでは、イベントは制御のために限られた文字のサブセットのみを必要とする。時間の進行には`-`、または`nil`を返すことによるシーケンスの終了を示す`|`など。ただし、一部のイベントでは1文字を超える文字列が生成される場合があり、他のイベントが同時に発生する場合もある。また、キャンセルイベントもある。これらはすべて、下記のテストテーマ定義になる:
+
+|  シンボル |  説明      | 例    |  
+| ------- | ----------------- | ---------- |
+|   `-`   | 時間の進行      | `"a--b--"` |
+|   `\|`  | 終了           | `"ab-\|"`   |
+|   `^`   | エラーをスロー   | `"ab-^"`   |
+|   `;`   | キャンセル      | `"ab;-"`   |
+|   `[`   | グループの開始   | `"[ab]-"`  |
+|   `]`   | グループの終了         | `"[ab]-"`  |
+|   `'`   | 値の開始/終了   | `"'foo'-"` |
+|   `,`   | 次の出力を遅らせる        | `",[a,]b"` |
+
+
+一部のイベントは複数の文字を使用する場合があり、イベントの進行を目で見て把握するには配置が重要であるため、スペースは解析されたイベントの一部としてカウントされない。スペースがあっても、イベントの時間は進まず、イベントの生成または出力の期待はされていない。これは、文字列`"a - -b- -"`が`"a--b--"`と同じであることを意味する。
+
+期待されるインタラクションのリストはよく知られているため、カスタムテーマの定義は簡単。たとえば、絵文字ベースの図を簡単に作成できる:
+
+```swift
+struct EmojiTokens: AsyncSequenceValidationTheme {
+    func token(_ character: Character, inValue: Bool) -> AsyncSequenceValidationDiagram.Token {
+        switch character {
+        case "➖": return .step
+        case "❗️": return .error
+        case "❌": return .finish
+        case "➡️": return .beginValue
+        case "⬅️": return .endValue
+        case "⏳": return .delayNext
+        case " ": return .skip
+        default: return .value(String(character))
+        }
+    }
+}
+
+validate(theme: EmojiTokens()) {
+    "➖🔴➖🟠➖🟡➖🟢➖❌"
+    $0.inputs[0]
+    "➖🔴➖🟠➖🟡➖🟢➖❌"
+}
+```
+
+このシステムのパブリックインターフェイスは、`AsyncSequenceValidationDiagram`のサブシステムと`XCTest`のextensionの2つの部分で構成されている。最も広く関係があり、導入しやすい部分は`XCTest`のextension。
+
+```swift
+extension XCTestCase {
+    public func validate<Test: AsyncSequenceValidationTest, Theme: AsyncSequenceValidationTheme>(theme: Theme, @AsyncSequenceValidationDiagram _ build: (inout AsyncSequenceValidationDiagram) -> Test, file: StaticString = #file, line: UInt = #line)
+    
+    public func validate<Test: AsyncSequenceValidationTest>(@AsyncSequenceValidationDiagram _ build: (inout AsyncSequenceValidationDiagram) -> Test, file: StaticString = #file, line: UInt = #line)
+}
+```
+
+これらの2つメソッドは、以前に使用したいくつかの例のように使い方が分類される。ただし、それがどのように機能するかということは、おそらくより重要になる。たとえば、以下にリストされているコードには、言及する価値のある興味深い点がいくつかある。
+
+```swift
+validate {
+    "a--b--c---|"
+    $0.inputs[0].map { item in await Task { item.capitalized }.value }
+    "A--B--C---|"
+}
+```
+
+入力シーケンスの進行は、`$0.inputs[0]`から導出できる。これは、`Element`型が文字列の`AsyncSequence`であり、指定された入力で、目盛り0で`"a"`、目盛り3で`"b"`、目盛り6で`"c"`、目盛り10で終了イベントを発行する。 真ん中の式`$0.inputs[0].map { item in await Task { item.capitalized }.value }`は、目盛り0で`"A"`、目盛り3で`"B"`、目盛り3で`"C"`、目盛り6と目盛り10での終了イベントが出力されることが期待される。
+
+注意深い方は、`map`関数が非同期であり、スケジュールが別のタスクで実行されることがすぐにわかるかもしれない。通常、これはイベントのタイミングが一つに定まらず、テストに明確なリスクをもたらす。ただし、`validate`は、Swift Concurrencyのランタイムへの特殊なフックを利用して、イベントを段階的かつ確定的にスケジュールする。これは2つの方法で機能する。1つは、カスタム`Clock`を使用してイベントをスケジュールすること。もう一つは、その`Clock`をキューに入れられたジョブがそのクロックと足並みを揃えて実行されるようにタスクドライバーに結び付ける。
+
+その機能を実現するための基盤は、実際の`AsyncSequenceValidationDiagram`のサブシステム。`XCTest`インターフェイスは、かなりシンプルな表層を提供し、図はわかりやすさのためにいくつかの重要なセクションに分割される。これらのセクションは、result builder、ダイアグラム時計、入力、テーマ、および期待/テスト。
+
+### Result Builder
+
+result builderの構文により、単純で簡潔な図を作成できる。これらの図は、入力なしから3つの入力まで、いくつかの形式で提供される。実装は3つの入力だけに限定されるものではなく、必要と思われる場合はさらに簡単に拡張できることに注目。builder自体は、複数パラメータのブロック構築関数を使用して、入力、テストされたシーケンス、および出力の適切な順序を確認する。
+
+```swift
+@resultBuilder
+public struct AsyncSequenceValidationDiagram : Sendable {
+    public static func buildBlock<Operation: AsyncSequence>(
+        _ sequence: Operation,
+        _ output: String
+    ) -> some AsyncSequenceValidationTest where Operation.Element == String
+    
+    public static func buildBlock<Operation: AsyncSequence>(
+        _ input: String, 
+        _ sequence: Operation, 
+        _ output: String
+    ) -> some AsyncSequenceValidationTest where Operation.Element == String
+    
+    public static func buildBlock<Operation: AsyncSequence>(
+        _ input1: String, 
+        _ input2: String, 
+        _ sequence: Operation, 
+        _ output: String
+    ) -> some AsyncSequenceValidationTest where Operation.Element == String 
+    
+    public static func buildBlock<Operation: AsyncSequence>(
+        _ input1: String, 
+        _ input2: String, 
+        _ input3: String, 
+        _ sequence: Operation, 
+        _ output: String
+    ) -> some AsyncSequenceValidationTest where Operation.Element == String
+    
+    public var inputs: InputList { get }
+    public var clock: Clock { get }
+}
+```
+
+`AsyncSequenceValidationTest`、`InputList`および`Clock`はこの次のセクションで紹介する。
+
+### バリデーションダイアグラム時計
+
+バリデーションダイアグラムの重要な機能の1つは、時間を制御できること。このテストのインフラストラクチャを適切に使用するには、すべての時間ソースをダイアグラム自体に公開されている`AsyncSequenceValidationDiagram.Clock`に関連付ける必要がある。これは、各列の入力と期待がどのように生成および消費されるかの瞬間。`steps`の組み込まれた方法で時間を測定する。イベントシンボルごとに1ステップ進む。デフォルトのASCIIダイアグラムでは、次のことを指す:
+
+- `-`、`;`、`\|`、`^`と任意の文字の値
+- `"'foo'"`のようなクォートで囲まれた値
+- `"[ab]"`のようなグループ化された値
+
+```swift
+extension AsyncSequenceValidationDiagram {
+  public struct Clock { }
+}
+
+extension AsyncSequenceValidationDiagram.Clock: Clock {
+    public struct Step: DurationProtocol, Hashable, CustomStringConvertible {
+        public static func + (lhs: Step, rhs: Step) -> Step
+        public static func - (lhs: Step, rhs: Step) -> Step
+        public static func / (lhs: Step, rhs: Int) -> Step
+        public static func * (lhs: Step, rhs: Int) -> Step
+        public static func / (lhs: Step, rhs: Step) -> Double
+        public static func < (lhs: Step, rhs: Step) -> Bool
+    
+        public static var zero: Step
+    
+        public static func steps(_ amount: Int) -> Step
+    }
+    
+    public struct Instant: InstantProtocol, CustomStringConvertible {
+        public func advanced(by duration: Step) -> Instant
+        
+        public func duration(to other: Instant) -> Step
+    }
+    
+    public var now: Instant { get }
+    public var minimumResolution: Step { get }
+    
+    public func sleep(
+        until deadline: Instant,
+        tolerance: Step? = nil
+    ) async throws
+}
+```
+
+Key Note: `AsyncSequenceValidationDiagram.Clock`の`minimumResolution`は`.steps(1)`に固定されており、`sleep`関数への許容範囲は無視される。これらの2つの動作が選択されたのは、実行の順序以外にサブステップの粒度がなく、許容範囲による合体は、結果が一つに定まる実行順序という明示的な期待を失ってしまうため。
+
+### Inputs
+
+バリデーションダイアグラムへの入力は、result builder構文によって作成された入力パラメータを使用してlazyに作成される。入力は、`Element`が`String`として定義されている`Sendable`および`AsyncSequence`に準拠した型。要素は、result builderの入力仕様で定義されたとおりに生成される。これは、要素が定義されている目盛りごとに、次の関数が再開してその要素を返すことを意味する(または、入力仕様に応じて、`nil`を返すか、エラーをスロー)。`InputList`は、lazyに定義された入力へのアクセスをに許可する。
+
+```swift
+extension AsyncSequenceValidationDiagram {
+    public struct Input: AsyncSequence, Sendable {
+        public typealias Element = String
+        
+        public struct Iterator: AsyncIteratorProtocol {
+            public mutating func next() async throws -> String?
+        }
+        
+        public func makeAsyncIterator() -> Iterator 
+    }
+    
+    public struct InputList: RandomAccessCollection, Sendable {
+        public typealias Element = Input
+    }
+}
+```
+
+バリデーションダイアグラムの入力リストへのアクセスは、他の例で見られる`$0.inputs[0]`などの呼び出しを介して行われる。このアクセスは、最初の入力仕様をlazyに取得し、そのドメイン固有言語(DSL)のシンボルから`Input`と`AsyncSequence`を作成する。
+
+### テーマ
+
+|  シンボル | トークン                     |  説明      | 例    |  
+| ------- | ------------------------- | ----------------- | ---------- |
+|   `-`   | `.step`                   | 時間の進行      | `"a--b--"` |
+|   `|`   | `.finish`                 | 終了       | `"ab-|"`   |
+|   `^`   | `.error`                  | エラーをスロー      | `"ab-^"`   |
+|   `;`   | `.cancel`                 | キャンセル      | `"ab;-"`   |
+|   `[`   | `.beginGroup`             | グループの開始       | `"[ab]-"`  |
+|   `]`   | `.endGroup`               | グループの終了         | `"[ab]-"`  |
+|   `'`   | `.beginValue` `.endValue` | 値の開始/終了   | `"'foo'-"` |
+|   `,`   | `.delayNext`              | 次の出力を遅らせる        | `",[a,]b"` |
+|   ` `   | `.skip`                   | スキップ/無視       | `"a b- |"` |
+|         | `.value`                  | 値           | `"ab-|"`   |
+
+無効なダイアグラム入力仕様がいくつかあります。下記の3つのケース:
+
+* グループで指定されているステップ(`"[a-]b|"`)
+* ネストしたグループ(`"[[ab]]|"`)
+* 不均衡なネスト(`"[ab|"`)
+
+```swift
+public protocol AsyncSequenceValidationTheme {
+      func token(_ character: Character, inValue: Bool) -> AsyncSequenceValidationDiagram.Token
+}
+extension AsyncSequenceValidationTheme where Self == AsyncSequenceValidationDiagram.ASCIITheme {
+    public static var ascii: AsyncSequenceValidationDiagram.ASCIITheme
+}
+extension AsyncSequenceValidationDiagram {
+    public enum Token {
+        case step
+        case error
+        case finish
+        case cancel
+        case delayNext
+        case beginValue
+        case endValue
+        case beginGroup
+        case endGroup
+        case skip
+        case value(String)
+    }
+    
+    public struct ASCIITheme: AsyncSequenceValidationTheme {
+        public func token(_ character: Character, inValue: Bool) -> AsyncSequenceValidationDiagram.Token
+    }
+}
+```
+
+### 期待値とテスト
+
+この一連のインターフェイスは、簡略化された`XCTest`のextensionが依存する主要なメカニズム。
+
+ドメイン固有言語(DSL)のシンボルで定義された期待値は、期待される結果と実際の結果で大まかに表すことができる。特に、失敗を伝えるシステムを通じてより適切に表現されるため、キャンセルと手順は省略される。期待値の失敗は、期待値と実際の値の組み合わせて表すことができる。これは、期待値の失敗がいつ発生したか、および発生した期待値の失敗の種類を、実際の値と期待値のペイロードとともに示すこともできる。
+
+```swift
+extension AsyncSequenceValidationDiagram {
+    public struct ExpectationResult {
+        public var expected: [(Clock.Instant, Result<String?, Error>)]
+        public var actual: [(Clock.Instant, Result<String?, Error>)]
+    }
+  
+    public struct ExpectationFailure: CustomStringConvertible {
+        public enum Kind {
+            case expectedFinishButGotValue(String)
+            case expectedMismatch(String, String)
+            case expectedValueButGotFinished(String)
+            case expectedFailureButGotValue(Error, String)
+            case expectedFailureButGotFinish(Error)
+            case expectedValueButGotFailure(String, Error)
+            case expectedFinishButGotFailure(Error)
+            case expectedValue(String)
+            case expectedFinish
+            case expectedFailure(Error)
+            case unexpectedValue(String)
+            case unexpectedFinish
+            case unexpectedFailure(Error)
+        }
+            
+        public var when: Clock.Instant
+        public var kind: Kind
+    }
+}
+```
+
+テスト自体は2つの方法に絞り込まれ、1つは`.ascii`のデフォルトのテーマパラメータ。テストメソッドは、同時実行ランタイムからの独自のスケジューリングフックを使用してバリデーションダイアグラムを実行し、協調的にマルチタスクを実行する単一のスレッドですべてのイベントを順次処理する。このスレッドは、イベントの順番と各時間の描写の実行を保証し、入力イベントの発行が上から下に順番になるようにする。入力0が最初に発行され、次に入力1が発行される。入力イベントの場合、そのタスクドライバースレッドにエンキューされたジョブは、受信順に実行される。これにより、実行の全体的な順番が安定し結果が一つに定まるようになるが、最も重要なのは予測可能であること。
+
+```swift
+public protocol AsyncSequenceValidationTest: Sendable {
+    var inputs: [String] { get }
+    var output: String { get }
+    
+    func test(_ event: (String) -> Void) async throws
+}
+
+extension AsyncSequenceValidationDiagram {
+    public static func test<Test: AsyncSequenceValidationTest, Theme: AsyncSequenceValidationTheme>(
+        theme: Theme,
+        @AsyncSequenceValidationDiagram _ build: (inout AsyncSequenceValidationDiagram) -> Test
+    ) throws -> (ExpectationResult, [ExpectationFailure])
+    
+    public static func test<Test: AsyncSequenceValidationTest>(
+        @AsyncSequenceValidationDiagram _ build: (inout AsyncSequenceValidationDiagram) -> Test
+    ) throws -> (ExpectationResult, [ExpectationFailure])
+}
+```
+
+### 将来的な方向性/改善
+
+絵文字ダイアグラムのテーマは、組み込みのシステムにすることもできる。それは本当に目立つスライド/デモを作り、何が起こっているのかを本当に簡単に見ることができるが、タイプするのが少し難しいという面もある。
+
+テストインフラストラクチャは、イテレータからエラーがスローされる、または`next`から`nil`が渡ってくる、という終了ケースを超えたテストのイテレーションを(わずかな変更で)サポートできる。これは、`AsyncSequence`の意味上の期待値の一部を強制するのに役立つ場合がある。
+
+ジョブの実行のためにランタイムにフックすることに加えて、ジョブの遅延実行もフックして、任意の時計を使用するスリープがバリデーションダイアグラムの内部の時計の目盛りに直接マップできるようにタイムスケール変換を行うこともできる。
+
+テストインフラストラクチャは、特定の目盛りの順番が指定されていない値のテストをサポートすることもできる。同時実行ランタイムの制御下にない外部システムからの一部の競合状態は、責任を負わない場合がある。これを考慮して、順序付けされていないグループトークンを追加できる。たとえば、記号`{`および`}`を使用して、順序付けされていないグループを表すことができる。ただし、これが`swift-async-algorithms`パッケージに本当に役立つと思われるケースはないため、現時点ではこれは優先的な事項ではない。
 
 ## 参考リンク
 
