@@ -216,7 +216,7 @@ for try await lineOrSeparator in joinedWithSeparator {
 
 https://github.com/apple/swift-async-algorithms/blob/main/Sources/AsyncAlgorithms/AsyncAlgorithms.docc/Guides/Lazy.md
 
-非同期シーケンスを非同期シーケンスに変換する。この操作は、すべての`Sequence`型で使用できる。
+同期シーケンスを非同期シーケンスに変換する。この操作は、すべての`Sequence`型で使用できる。
 
 ```swift
 let numbers = [1, 2, 3, 4].async
