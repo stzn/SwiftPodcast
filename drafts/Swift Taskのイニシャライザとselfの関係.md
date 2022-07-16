@@ -429,7 +429,7 @@ final class DetailViewController: UIViewController {
 
     @objc private func onTap(_: UIButton) {
         dismiss(animated: true)
-        Task {
+        task = Task {
             do {
                 try await Task.sleep(nanoseconds: NSEC_PER_SEC * 2)
                 self.showAlert()
