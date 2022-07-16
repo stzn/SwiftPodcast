@@ -384,7 +384,7 @@ Swift5.5では、「escapingする`self`の使用制限」(escaping-use restrict
 
 このカテゴリには`non-async`イニシャライザや`self`とは異なったコンテキスト(global-actor)に分離したイニシャライザを含んでいる。`actor`のメソッドと異なり、同期する必要のある`actor`インスタンスは存在しないため、`actor`の`non-async`イニシャライザに`await`は必要ない。さらに、もし安全ならば、同期なしで格納プロパティにアクセスすることができる。
 
-ただし、格納プロパティにアクセスするには`actor`のインスタンスをまず立ち上げる(初期化を完了させる)必要がある。これは`self`への参照のアクセスが排他的であるということに依存しており、より弱い形式の分離であると見なされる。もし`self`がイニシャライザをescapeして使用される場合、このユニークさを保証するためには時間コストのかかる分析をしなければならない。そこで、直接格納プロパティへアクセスする以外に`self`を使っている期間は`self`に`nonisolated`な状態に変化(衰退)する。(Flow-Sensitive `actor`分離(※))。これは特定の制御フローで一度起きたらイニシャライザの最後まで保たれる。
+ただし、格納プロパティにアクセスするには`actor`のインスタンスをまず立ち上げる(初期化を完了させる)必要がある。これは`self`への参照のアクセスが排他的であるということに依存しており、より弱い形式の分離であると見なされる。もし`self`がイニシャライザをescapeして使用される場合、このユニークさを保証するためには時間コストのかかる分析をしなければならない。そこで、直接格納プロパティへアクセスする以外に`self`を使った以降、`self`は`nonisolated`な状態に変化(衰退)する。(Flow-Sensitive `actor`分離(※))。これは特定の制御フローで一度起きたらイニシャライザの最後まで保たれる。
 
 ※ データフロー解析を使って制御フローの位置に応じて`actor`の分離状態を変えること。
 https://ja.wikipedia.org/wiki/データフロー解析
@@ -405,7 +405,7 @@ class NotSendableString { /* ... */ }
 final class Address: Sendable { /* ... */ }
 func greetCharlie(_ charlie: Charlie) {}
 
-`actor` Charlie {
+actor Charlie {
     var score: Int
     let fixedNonSendable: NotSendableString
     let fixedSendable: Address
@@ -427,7 +427,7 @@ func greetCharlie(_ charlie: Charlie) {}
             score = 50
         }
 
-        assert(score >= 50) // ❌ selfのnonisolatedな使用後に、可変な分離された格納プロパティへアクセスできない
+        assert(score >= 50) // ❌ selfのnonisolatedな使用後に、可変なactor分離の格納プロパティへアクセスできない
 
         _ = self.fixedNonSendable // ❌ selfのnonisolatedな使用後に、non-Sendableなプロパティへアクセスできない
         _ = self.fixedSendable
