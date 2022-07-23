@@ -129,11 +129,11 @@ Swift Concurrencyの基本目標である、プログラム上は基本的なデ
 下記のようなことが起きる。
 
 ```swift
-`actor` MyActor {
+actor MyActor {
     var isolated: NonSendableValue
 
     // 下記の2つの関数を呼び出す2つの異なるタスクがあり
-    // `actor`はinside_one()のタスクを先に呼ぶ状況を想定
+    // actorはinside_one()のタスクを先に呼ぶ状況を想定
 
     func inside_one() async {
         await outside(argument: isolated)
@@ -144,13 +144,13 @@ Swift Concurrencyの基本目標である、プログラム上は基本的なデ
     }
 }
 
-// これは`actor`に分離されていない`async`関数
+// これはactorに分離されていない`async`関数
 func outside(argument: NonSendableValue) async {
     // 現在の実行セマンティクスだと、sleepから再開した際に
     // `actor`のエグゼキュータから離れる
     // 今回のプロポーザルの実行セマンティクスだと、
     // sleepの前に`actor`のエグゼキュータから離れる
-    await Task.sleep(nanoseconds: 1_000)
+    try? await Task.sleep(nanoseconds: 1_000)
 
     // いずれにせよ、このnon-Sendableの値は同時並行に`actor`と`actor`外で利用されている
     argument.operate()
