@@ -120,8 +120,8 @@ final class SomeViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         Task {
-            globalActorFunction() // ⭕️
-            mainActorFunction() // ❌ Expression is 'async' but is not marked with 'await'
+            globalActorFunction() // ❌ Expression is 'async' but is not marked with 'await'
+            mainActorFunction() // ⭕️
         }
     }
 }
