@@ -35,8 +35,6 @@
       - [RangeReplaceableCollection](#rangereplaceablecollection)
       - [Dictionary](#dictionary)
       - [SetAlgebra](#setalgebra)
-  - [Taskの管理](#taskの管理)
-    - [Task.select](#taskselect)
   - [効果(Effects)](#効果effects)
   - [AsyncSequence Validation](#asyncsequence-validation)
     - [Result Builder](#result-builder)
@@ -648,25 +646,6 @@ let table = await Dictionary(uniqueKeysWithValues: zip(keys, values))
 let allItems = await Set(items.prefix(10))
 ```
 
-## Taskの管理
-
-### Task.select
-
-多くのアルゴリズムの基本的な部分は、アクティブなタスクの特定のリストから最初に解決されたタスクを選択できること。これにより、`debounce`や`merge`などのアルゴリズムが可能になる。
-
-アクティブなタスクのリストから完了した最初のタスクを選択することは、`select(2)`と同様のアルゴリズム。これは、子タスクの代わりに、この関数がすでに実行中のタスクも処理でき、選択された際に完了時に他の子タスクをキャンセルせず、リスト内のすべてのタスクの完了を待つ必要がないことを除いて、`TaskGroup`と同様の動作をする。
-
-同じ成功と失敗の型を共有する任意の数の`Task`オブジェクトが与えられた際、`Task.select`は、各タスクの結果をsuspendして待機し、最初のタスクが結果を生成したときに`resume`する。`Task.select`の自体のタスクがsuspend中にそのタスクがキャンセルされると、選択されているタスクもキャンセルされる。これは`TaskGroup`のファミリに似ているが、動作と構造にいくつかの違いがある:
-
-`withTaskGroup`APIは、効率的な子タスクを作成する。`Task.select`APIは、既存のタスクを受け取る。
-
-`withTaskGroup`APIは、すべての子タスクの完了を待ってから戻り値を返す。`Task.select`APIは、最初のタスクの完了を待ってから戻り値を返す。
-
-`withTaskGroup`APIは、戻り値を待機中、すべての未処理の子タスクをキャンセルする。`Task.select`APIは、選択されていないタスクは実行し続けることができる。
-
-`withTaskGroup`は、子タスクない状態で待機できる。`Task.select`APIは、選択するために少なくとも1つのタスクを必要とする。0個の場合はプログラマエラー。
-
-つまり、`withTaskGroup`は作業を並行して実行するのに非常に適しているが、`Task.select`は、値を提供する最初のタスクを見つけることを目的としている。子タスクではないタスクには固有の追加コストがあるため、`Task.select`は、グループとしてより適していると思われる箇所の置き換えに使うべきではなく、高度なアルゴリズムが必要になりそうな場所に提供するべき。
 
 ## 効果(Effects)
 
