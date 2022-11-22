@@ -657,62 +657,62 @@ let allItems = await Set(items.prefix(10))
 | 種類                                                 | スロー        | `Sendable` |
 |-----------------------------------------------------|--------------|------------|
 | `AsyncAdjacentPairsSequence`                        | rethrows     | 条件付き |
-| `AsyncBufferedByteIterator`                         | throws       | Sendable |
+| `AsyncBufferedByteIterator`                         | throws       | Not Sendable |
 | `AsyncBufferSequence`                               | rethrows     | 条件付き |
-| `AsyncBufferSequence.Iterator`                      | rethrows     | 条件付き |
+| `AsyncBufferSequence.Iterator`                      | rethrows     | Not Sendable |
 | `AsyncChain2Sequence`                               | rethrows     | 条件付き |
-| `AsyncChain2Sequence.Iterator`                      | rethrows     | 条件付き |
+| `AsyncChain2Sequence.Iterator`                      | rethrows     | Not Sendable |
 | `AsyncChain3Sequence`                               | rethrows     | 条件付き |
-| `AsyncChain3Sequence.Iterator`                      | rethrows     | 条件付き |
+| `AsyncChain3Sequence.Iterator`                      | rethrows     | Not Sendable |
 | `AsyncChannel`                                      | non-throwing | Sendable |
-| `AsyncChannel.Iterator`                             | non-throwing | Sendable |
+| `AsyncChannel.Iterator`                             | non-throwing | Not Sendable |
 | `AsyncChunkedByGroupSequence`                       | rethrows     | 条件付き |
-| `AsyncChunkedByGroupSequence.Iterator`              | rethrows     | 条件付き |
+| `AsyncChunkedByGroupSequence.Iterator`              | rethrows     | Not Sendable |
 | `AsyncChunkedOnProjectionSequence`                  | rethrows     | 条件付き |
-| `AsyncChunkedOnProjectionSequence.Iterator`         | rethrows     | 条件付き |
+| `AsyncChunkedOnProjectionSequence.Iterator`         | rethrows     | Not Sendable |
 | `AsyncChunksOfCountOrSignalSequence`                | rethrows     | Sendable |
-| `AsyncChunksOfCountOrSignalSequence.Iterator`       | rethrows     | Sendable |
+| `AsyncChunksOfCountOrSignalSequence.Iterator`       | rethrows     | Not Sendable |
 | `AsyncChunksOfCountSequence`                        | rethrows     | 条件付き |
-| `AsyncChunksOfCountSequence.Iterator`               | rethrows     | 条件付き |
+| `AsyncChunksOfCountSequence.Iterator`               | rethrows     | Not Sendable |
 | `AsyncCombineLatest2Sequence`                       | rethrows     | Sendable |
-| `AsyncCombineLatest2Sequence.Iterator`              | rethrows     | Sendable |
+| `AsyncCombineLatest2Sequence.Iterator`              | rethrows     | Not Sendable |
 | `AsyncCombineLatest3Sequence`                       | rethrows     | Sendable |
-| `AsyncCombineLatest3Sequence.Iterator`              | rethrows     | Sendable |
+| `AsyncCombineLatest3Sequence.Iterator`              | rethrows     | Not Sendable |
 | `AsyncCompactedSequence`                            | rethrows     | 条件付き |
-| `AsyncCompactedSequence.Iterator`                   | rethrows     | 条件付き |
+| `AsyncCompactedSequence.Iterator`                   | rethrows     | Not Sendable |
 | `AsyncDebounceSequence`                             | rethrows     | Sendable |
-| `AsyncDebounceSequence.Iterator`                    | rethrows     | Sendable |
+| `AsyncDebounceSequence.Iterator`                    | rethrows     | Not Sendable |
 | `AsyncExclusiveReductionsSequence`                  | rethrows     | 条件付き |
-| `AsyncExclusiveReductionsSequence.Iterator`         | rethrows     | 条件付き |
+| `AsyncExclusiveReductionsSequence.Iterator`         | rethrows     | Not Sendable |
 | `AsyncInclusiveReductionsSequence`                  | rethrows     | 条件付き |
-| `AsyncInclusiveReductionsSequence.Iterator`         | rethrows     | 条件付き |
+| `AsyncInclusiveReductionsSequence.Iterator`         | rethrows     | Not Sendable |
 | `AsyncInterspersedSequence`                         | rethrows     | 条件付き |
-| `AsyncInterspersedSequence.Iterator`                | rethrows     | 条件付き |
+| `AsyncInterspersedSequence.Iterator`                | rethrows     | Not Sendable |
 | `AsyncJoinedSequence`                               | rethrows     | 条件付き |
-| `AsyncJoinedSequence.Iterator`                      | rethrows     | 条件付き |
+| `AsyncJoinedSequence.Iterator`                      | rethrows     | Not Sendable |
 | `AsyncLazySequence`                                 | non-throwing | 条件付き |
-| `AsyncLazySequence.Iterator`                        | non-throwing | 条件付き |
+| `AsyncLazySequence.Iterator`                        | non-throwing | Not Sendable |
 | `AsyncLimitBuffer`                                  | non-throwing | Sendable |
 | `AsyncMerge2Sequence`                               | rethrows     | Sendable |
-| `AsyncMerge2Sequence.Iterator`                      | rethrows     | Sendable |
+| `AsyncMerge2Sequence.Iterator`                      | rethrows     | Not Sendable |
 | `AsyncMerge3Sequence`                               | rethrows     | Sendable |
-| `AsyncMerge3Sequence.Iterator`                      | rethrows     | Sendable |
+| `AsyncMerge3Sequence.Iterator`                      | rethrows     | Not Sendable |
 | `AsyncRemoveDuplicatesSequence`                     | rethrows     | 条件付き |
-| `AsyncRemoveDuplicatesSequence.Iterator`            | rethrows     | 条件付き |
+| `AsyncRemoveDuplicatesSequence.Iterator`            | rethrows     | Not Sendable |
 | `AsyncThrottleSequence`                             | rethrows     | 条件付き |
-| `AsyncThrottleSequence.Iterator`                    | rethrows     | 条件付き |
+| `AsyncThrottleSequence.Iterator`                    | rethrows     | Not Sendable |
 | `AsyncThrowingChannel`                              | throws       | Sendable |
-| `AsyncThrowingChannel.Iterator`                     | throws       | Sendable |
+| `AsyncThrowingChannel.Iterator`                     | throws       | Not Sendable |
 | `AsyncThrowingExclusiveReductionsSequence`          | throws       | 条件付き |
-| `AsyncThrowingExclusiveReductionsSequence.Iterator` | throws       | 条件付き |
+| `AsyncThrowingExclusiveReductionsSequence.Iterator` | throws       | Not Sendable |
 | `AsyncThrowingInclusiveReductionsSequence`          | throws       | 条件付き |
-| `AsyncThrowingInclusiveReductionsSequence.Iterator` | throws       | 条件付き |
+| `AsyncThrowingInclusiveReductionsSequence.Iterator` | throws       | Not Sendable |
 | `AsyncTimerSequence`                                | non-throwing | Sendable |
-| `AsyncTimerSequence.Iterator`                       | non-throwing | Sendable |
+| `AsyncTimerSequence.Iterator`                       | non-throwing | Not Sendable |
 | `AsyncZip2Sequence`                                 | rethrows     | Sendable |
-| `AsyncZip2Sequence.Iterator`                        | rethrows     | Sendable |
+| `AsyncZip2Sequence.Iterator`                        | rethrows     | Not Sendable |
 | `AsyncZip3Sequence`                                 | rethrows     | Sendable |
-| `AsyncZip3Sequence.Iterator`                        | rethrows     | Sendable |
+| `AsyncZip3Sequence.Iterator`                        | rethrows     | Not Sendable |
 </details>
 </br>
 
