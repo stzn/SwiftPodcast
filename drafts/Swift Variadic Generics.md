@@ -14,6 +14,7 @@
 ### Forums
 
 - [Variadic Generics](https://forums.swift.org/t/variadic-generics/54511)
+- [ABI for variadic generics](https://forums.swift.org/t/abi-for-variadic-generics/55213)
 
 ### プロポーザルドキュメント
 
