@@ -69,7 +69,7 @@ Swift6まで部分的または全体的に延期している次のプロポー�
 - [SE-0352 "Implicitly Opened Existentials"](https://github.com/apple/swift-evolution/blob/main/proposals/0352-implicit-open-existentials.md)(`ImplicitOpenExistentials`)は、Swift5.xで十分に機能しているコードのセマンティクスを変更したくなかったため、Swift6で「存在型の暗黙的開示」をより多くのケースに拡張する。この機能を有効にすると、これらの追加のケースで「存在型の暗黙的開示」が実行される
 - [SE-0354 "RegexLiterals"](https://github.com/apple/swift-evolution/blob/main/proposals/0354-regex-literals.md)(`BareSlashRegexLiterals`)は、Swift6まで`/.../`正規表現リテラル構文の導入を延期する。この機能を有効にすることは、`-enable-bare-regex-syntax`と同等で、`/.../`正規表現リテラル構文が利用可能になる。このプロポーザルとSE-0354が同じリリースで導入される場合、このプロポーザルのアプローチをサポートして`-enable-bare-regex-syntax`は完全に削除できる
 
-###　Swift Package Managerのサポート
+### Swift Package Managerのサポート
 
 SwiftPMのターゲットに、必要なupcoming featureを指定できる必要がある。`SwiftSetting`のAPIを拡張して、upcoming featureを有効にする。
 
