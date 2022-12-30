@@ -18,7 +18,7 @@
 
 ## 概要
 
-`Discarding[Throwing]TaskGroup`というStructured ConcurrencyのTaskGroupに新しい型を導入することを提案する。これは、`TaskGroup`に似ているが、子タスクの結果を即座に破棄する。これは、HTTPや他の種類のRPCサーバーの最上位層で行われるループなど、潜在的に無限に実行され続けるタスクのグループで利用することに特化している。
+`[Throwing]DiscardingTaskGroup`というStructured ConcurrencyのTaskGroupに新しい型を導入することを提案する。これは、`TaskGroup`に似ているが、子タスクの結果を即座に破棄する。これは、HTTPや他の種類のRPCサーバーの最上位層で行われるループなど、潜在的に無限に実行され続けるタスクのグループで利用することに特化している。
 
 ## 内容
 
@@ -142,7 +142,7 @@ public struct ThrowingDiscardingTaskGroup<Failure: Error> {
     public var isCancelled: Bool
 }
 @available(*, unavailable)
-extension DiscardingThrowingTaskGroup: Sendable { }
+extension ThrowingDiscardingTaskGroup: Sendable { }
 ```
 
 ## 詳細
