@@ -336,7 +336,7 @@ struct Flag<Metadata>: Attribute {
 
 ### Forums
 
-- []()
+- [SE-0385: Custom Reflection Metadata](https://forums.swift.org/t/se-0385-custom-reflection-metadata/62777)
 
 ### プロポーザルドキュメント
 
