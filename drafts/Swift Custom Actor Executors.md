@@ -577,6 +577,7 @@ protocol SerialExecutor: Executor {
 ### Forums
 
 - [[Pitch] Custom Actor Executors](https://forums.swift.org/t/pitch-custom-actor-executors/63135)
+- [SE-0392: Custom Actor Executors](https://forums.swift.org/t/se-0392-custom-actor-executors/63599)
 
 ### プロポーザルドキュメント
 
