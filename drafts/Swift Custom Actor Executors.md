@@ -11,6 +11,10 @@
     - [Jobs](#jobs)
     - [カスタムのSerialExecutorを持つActor](#カスタムのserialexecutorを持つactor)
     - [Executorのアサーション](#executorのアサーション)
+  - [Actor executorsの推論](#actor-executorsの推論)
+  - [Executorの等価チェックの詳細](#executorの等価チェックの詳細)
+    - [同じSerialExecutorに委譲する一意のExecutor](#同じserialexecutorに委譲する一意のexecutor)
+    - [同じ実行コンテキストを提供する異なるExecutor](#同じ実行コンテキストを提供する異なるexecutor)
     - [デフォルトのSwiftランタイムExecutor](#デフォルトのswiftランタイムexecutor)
   - [ソース互換性](#ソース互換性)
   - [ABI stabilityへの影響](#abi-stabilityへの影響)
@@ -109,7 +113,7 @@ final class MyOldExecutor: SerialExecutor {
 Executorは、そのJob を実行するときに、特定の順序規則に従うことが要求される。
 
 - `SerialExecutor.runJobSynchronously(_:)`の呼び出しは、`enqueue(_:)`の呼び出しの後に起こらなければならない
-- もし、Executorが シリアルなExecutorであれば、すべてのJobの実行は完全に順序付けられなければならないり。`enqueue(_:`)で同じ Executorに投入された2つの異なるJobAとBに対して、AのすべてのイベントがBのすべてのイベントの前に起こるか、BのすべてのイベントがAのすべてのイベントよりも先に起こらなければならない(happen-before)
+- もし、Executorが SerialなExecutorであれば、すべてのJobの実行は完全に順序付けられなければならないり。`enqueue(_:`)で同じ Executorに投入された2つの異なるJobAとBに対して、AのすべてのイベントがBのすべてのイベントの前に起こるか、BのすべてのイベントがAのすべてのイベントよりも先に起こらなければならない(happen-before)
   - 例えば、一方のJobの優先度が他方より高い場合など。しかし、A と B はそれぞれ独立して、他方が実行される前に完了しなければならないことに注意する必要がある
 
 ### Serial Executors
@@ -450,6 +454,191 @@ actor B {
 将来的には、Actor間の関係が静的に表現されている場合(ActorBがAの特定のインスタンスと同じ`SerialExecutor`上にあることを宣言する)ような特定のActorインスタンス間では`await`が必要ないような静的チェックを可能にすることが考えられる。しかし、そのような機能はこの最初の提案の範囲ではなく、今は動的な側面のみを提案している。
 
 現時点では、Dispatchと同様、これらのAPIは「assert」/「precondition」バージョンしか提供していない。また、現在のところ、特定のExecutorにいるかどうかを動的に確認する方法は公開されていない。
+
+## Actor executorsの推論
+
+> 注：このAPIは当初、Custom Executorとは別に提案されましたが、この機能に取り組むうちに、Custom ExecutorやExecutorでのアサーションととても密接に関係しているかがわかった。最初のピッチのスレッドは[Pitch: MainActorの安全でないアサート](https://forums.swift.org/t/pitch-unsafe-assume-on-mainactor/63074/)。
+この提案の改訂版では、`assumeOnMainActorExecutor(_:)`メソッドを導入し、同期コードがMainActorのExecutorのコンテキスト内で呼び出されたことを安全に推論できるようにした。非同期コードでこの要件を満たすには、`@MainActor`を使用して関数をアノテートし、静的にこの要件を保証するのが正しい方法だからである。
+
+同期コードは、このassumeメソッドを使用することで、MainActorのExecutor上で実行されていると推論することができる:
+
+```swift
+/// MainActorの実行中にこの関数が呼び出されたかどうか、実行時にテストを行う。
+/// その後、操作が呼び出され、その結果が返される。
+/// 
+/// - 注意：MainActorとの競合状態を防ぐため、別の実行コンテキストから呼び出された場合、
+/// このメソッドはクラッシュする。
+@available(*, noasync)
+func assumeOnMainActorExecutor<T>(
+    _ operation: @MainActor () throws -> T,
+    file: StaticString = #fileID, line: UInt = #line
+) rethrows -> T
+```
+
+assertやprecondition APIと同様に、このチェックはActorのExecutorに対して行われるため、複数のActorが同じExecutor上で実行されている場合、そのActorから起動された同期コードでもこのチェックは成功しする。つまり、以下のようなコードも正しい:
+
+```swift
+
+func check(values: MainActorValues) /* synchronous! */ {
+  // values.get("any") // error: main actor isolated, cannot perform async call here
+  assumeOnMainActorExecutor {
+    values.get("any") // 正しい&安全
+  }
+}
+
+actor Friend {
+  var unownedExecutor: UnownedSerialExecutor { 
+    MainActor.sharedUnownedExecutor
+  }
+  
+  func callCheck(values: MainActorValues) {
+    check(values) // 正しい
+  }
+}
+
+actor Unknown {
+  func callCheck(values: MainActorValues) {
+    check(values) // MainActorのExecutor上で実行していないためクラッシュ
+  }
+}
+
+@MainActor
+final class MainActorValues {
+  func get(_: String) -> String { ... } 
+}
+```
+
+> 注: `@SomeActor () -> T`関数型のGlobalActorの分離を抽象化することはできないので、現在、私たちはこのAPIのバージョンを任意のGlobalActorに対して提供していない。しかし、マクロを使用して今日そのようなAPIを実装することは可能であり、十分に重要だと見なされればフォローアップの提案で説明できるはず。このようなAPIは`#assumeOnGlobalActorExecutor(GlobalActor.self)`と記述する必要がある。
+
+MainActorに特化したAPIに加えて、同じ形のAPIが独自のActorに提供され、提供されているActorと同じSerialExecutorで実行されることが保証されることで同時アクセス違反が起こらない場合、分離したMainActorの参照を得ることができる。
+
+```swift
+@available(*, noasync)
+func assumeOnActorExecutor<Act: Actor T>(
+    _ operation: (isolated Act) throws -> T,
+    file: StaticString = #fileID, line: UInt = #line
+) rethrows -> T
+
+@available(*, noasync)
+func assumeOnLocalDistributedActorExecutor<Act: DistributedActor T>(
+    _ operation: (isolated Act) throws -> T,
+    file: StaticString = #fileID, line: UInt = #line
+) rethrows -> T
+```
+
+これらのassumeメソッドは、チェックが特定のインスタンスではなくActorのExecutorについて実行されるという意味で、先ほど説明した`assumeOnMainActorExecutor`と同じセマンティクスを持つ。言い換えれば、多くの独自のActorが同じSerialExecutorを共有する場合、現在実行中のExecutorが同じであるとわかっている限り、このチェックはそれらのそれぞれについてパスするだろう。
+
+## Executorの等価チェックの詳細
+
+前の2つのセクションでは、様々なassert、precondition、assume APIを説明したが、これらはすべて「同じSerialExecutor」という概念に依存しています。デフォルトでは、すべてのActorはそれ自身のSerialExecutorインスタンスを取得し、そのようなインスタンスはそれぞれ一意である。したがって、Executorを共有することなく、各ActorのSerialExecutorはそれ自体に対してユニークであり、したがって、precondition APIは、チェックがExecutorの識別子に対して実行されるにもかかわらず、実際は「我々はこの特定のActorにいるか」をチェックします。
+
+### 同じSerialExecutorに委譲する一意のExecutor
+
+この提案で議論したいのは、「同じExecutor」をチェックする2つのケースである。まず、いくつかのActorがSerialExecutorを共有したいとしても、開発者は様々なpreconditionチェックのためにこの「同じSerialExecutor上の異なるActorは同じ実行コンテキストにある」というセマンティクスを受け取りたくない場合がある。
+
+この解決策は、Executorの実装方法にあり、具体的には、他の既存のExecutorの周りにラッパーExecutorを提供することが常に可能である。こうすることで、たとえ同じSerialExecutor上でスケジューリングすることになったとしても、一意なExecutorIDを割り当てることができるようになる。例として、次のようなものがある。
+
+```swift
+final class SpecificThreadExecutor: SerialExecutor { ... }
+
+final class UniqueSpecificThreadExecutor: SerialExecutor {
+  let delegate: SpecificThreadExecutor
+  init(delegate: SpecificThreadExecutor) {
+    self.delegate = delegate
+  }
+  
+  func enqueue(_ job: consuming Job) {
+    delegate.enqueue(job)
+  }
+  
+  func asUnownedSerialExecutor() -> UnownedSerialExecutor {
+    UnownedSerialExecutor(ordinary: self)
+  }
+}
+
+actor Worker {
+  let unownedExecutor: UnownedSerialExecutor
+  
+  init(executor: SpecificThreadExecutor) {
+    let uniqueExecutor = UniqueSpecificThreadExecutor(delegate: executor)
+    self.unownedExecutor = uniqueExecutor.asUnownedSerialExecutor()
+  }
+  
+  func test(other: Worker) {
+    assert(self !== other)
+    assertOnActorExecutor(other) // クラッシュを期待
+    // 結果的に同じExecutorに処理を委譲するが`other` は異なる一意のExecutorである
+  }
+}
+```
+
+### 同じ実行コンテキストを提供する異なるExecutor
+
+また、SerialExecutorのIDの互換性チェックをするオプショナルの拡張を導入し、Executorがチェックに参加することを可能にする。これは、先ほど説明したことと逆の状況を扱うためである。つまり異なるExecutorが実際には同じ排他的シリアル実行コンテキスト上にあり、これらのassertion APIで引っかからないためにSwiftランタイムに知らせたいときである。
+
+異なる一意のExecutorインスタンスを持つが同じ排他的シリアル実行コンテキスト上で動作する一例は、異なるキューを「ターゲット」することができるDispatchQueueがある。言い換えれば、DispatchQueue`Q1`と`Q2`が同じキュー`Qx`（あるいは「Main」DispatchQueue）をターゲットにすることが可能である。
+
+この機能を簡単に利用するために、`UnownedSerialExecutor`を公開する場合、Executorは`init(complexEquality:)`イニシャライザを使用しなければならない。
+
+```swift
+extension MyQueueExecutor { 
+  public func asUnownedSerialExecutor() -> UnownedSerialExecutor {
+    UnownedSerialExecutor(complexEquality: self)
+  } 
+}
+```
+
+一意のイニシャライザは、「もしExecutorのポインタが同じなら、それは同じExecutorの排他的実行コンテキスト上にある」というExecutorの等価チェックは現在の高速パスのセマンティクスを維持するが、等価チェックが失敗した場合に「深いチェック」をするコードパスを追加する。
+
+「これは同じ（または互換性のある）シリアル実行コンテキストですか」というチェックを実行するとき、Swiftランタイムは、最初にExecutorオブジェクトへの生のポインタを比較する。それらが等しくなく、問題のExecutorが`complexEquality`を持つ場合、いくつかの追加の型チェックの後、次の`isSameExclusiveExecutionContext(other:)`メソッドが呼び出される。
+
+```swift
+protocol SerialExecutor {
+
+  // ...以前に議論したプロトコル要件 ...
+
+  /// このExecutorが複雑な等価セマンティクスを持っていて、ランタイムが2つのExecutorを比較する必要がある場合、
+  /// まず通常のポインタベースの等価チェックを試み、失敗したら両方のExecutorの型を比較し、同じであれば、最後にこの方法を呼び出す。
+  /// このメソッドは細心の注意を払って実装する必要がある。
+  /// 誤って `true` を返すと、別の実行コンテキスト（例えばスレッド）から、別のActorによって分離されていることを意図していたコードを実行できてしまうからである。
+  /// このチェックは、Executorの切り替えを行う際には使用されない。
+  /// `preconditionTaskOnActorExecutor`、`preconditionTaskOnActorExecutor`、`assumeOnActorExecutor`や同様のAPIで同じ「排他的シリアル実行コンテキスト」についてassertする場合に使用する。
+  /// - Parameter other:
+  /// returns: `self` と `other` のExecutorが相互に排他的であり、一方を想定したコードを他方で実行することがConcurrencyの観点から安全である場合、true を返す。
+  func isSameExclusiveExecutionContext(other: Self) -> Bool
+}
+
+extension SerialExecutor {
+  func isSameExclusiveExecutionContext(other: Self) -> Bool {
+    self === other
+  }
+}
+```
+
+このAPIは、例えば将来のDispatchQueueのようなExecutorが「深い」チェックを実行し、例えば両方のExecutorが実際に同じスレッドやキューをターゲットにしていればtrueを返し、したがって適切に分離された相互排他的なシリアル実行コンテキストを保証することができる。
+
+APIは、ユーザコードへのこのやや重い呼び出しを使用して完全に無関係なExecutorを比較することを避けるために、両方のExecutorが同じ型でなければならないことを明示的に強制する。上述したAPIを使用する目的で、Executorを比較するための具体的なロジックは以下の通りである
+
+Executorの型(ExecutorRef、特にImplementation/witnessテーブルフィールドに格納するビット)を検査し、両方が同じであれば、次のようになる。
+
+- **「通常」**（または「一意」として知られる）、これは間違いなく 「ルート」Executorと考えることができる
+- 作成
+  - 現在の`UnownedSerialExecutor.init(ordinary:)`を使う
+- 比較
+  - 2つのExecutorのポインタを直接比較する
+    - 結果を返す
+- **complexEquality**は、「内側」Executorとみなされるかもしれない、例えばより深く等価チェックをするために正確な識別子が必要なもの
+  - 作成
+    - ランタイムが認識できる特定のビットを設定し、必要に応じてのcomplexEqualityを行うコードパスに到達する`UnownedSerialExecutor(complexEquality:)`がある
+    - 比較
+      - 両方のExecutorが`complexEquality`である場合、2つのExecutorの識別子を直接比較する。
+        - trueの場合、return(これはファストパスで、通常のExecutorと同じである)する
+      - Executorの証人テーブルを比較し、互換性があるかどうかを確認する
+        - falseの場合、returnする
+      - Executorに実装された`executor1.isSameExclusiveExecutionContext(executor2)`を呼び出す
+        - 結果を返す
+
+これらのチェックは、タスクの切り替えを完全に最適化するには不十分である可能性が高く、将来的にはタスクの切り替えを最適化する他のメカニズムが提供される予定である(「将来の検討」参照)。
 
 ### デフォルトのSwiftランタイムExecutor
 
