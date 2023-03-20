@@ -1,6 +1,6 @@
-# Expression Macros
+# Swift 式マクロ(Expression Macros)
 
-- [Expression Macros](#expression-macros)
+- [Swift 式マクロ(Expression Macros)](#swift-式マクロexpression-macros)
   - [概要](#概要)
   - [内容](#内容)
     - [動機](#動機)
