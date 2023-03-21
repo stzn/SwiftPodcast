@@ -10,7 +10,7 @@
     - [Zip](#zip)
     - [Joined](#joined)
   - [非同期シーケンスの生成](#非同期シーケンスの生成)
-    - [AsyncLazySequence](#asynclazysequence)
+    - [AsyncSyncSequence](#asyncsyncsequence)
     - [Channel](#channel)
   - [非同期イテレーションのパフォーマンスの最適化](#非同期イテレーションのパフォーマンスの最適化)
     - [AsyncBufferedByteIterator](#asyncbufferedbyteiterator)
@@ -212,7 +212,7 @@ for try await lineOrSeparator in joinedWithSeparator {
 
 ## 非同期シーケンスの生成
 
-### AsyncLazySequence
+### AsyncSyncSequence
 
 https://github.com/apple/swift-async-algorithms/blob/main/Sources/AsyncAlgorithms/AsyncAlgorithms.docc/Guides/Lazy.md
 
@@ -711,8 +711,8 @@ let allItems = await Set(items.prefix(10))
 | `AsyncInterspersedSequence.Iterator`                | rethrows     | 条件付き |
 | `AsyncJoinedSequence`                               | rethrows     | 条件付き |
 | `AsyncJoinedSequence.Iterator`                      | rethrows     | 条件付き |
-| `AsyncLazySequence`                                 | non-throwing | 条件付き |
-| `AsyncLazySequence.Iterator`                        | non-throwing | 条件付き |
+| `AsyncSyncSequence`                                 | non-throwing | 条件付き |
+| `AsyncSyncSequence.Iterator`                        | non-throwing | 条件付き |
 | `AsyncLimitBuffer`                                  | non-throwing | Sendable |
 | `AsyncMerge2Sequence`                               | rethrows     | Sendable |
 | `AsyncMerge2Sequence.Iterator`                      | rethrows     | Sendable |
