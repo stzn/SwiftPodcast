@@ -506,7 +506,7 @@ struct Farm {
         animal.eat(...)
     }
 
-    func feedAll(_ animals: [some Animal]) {
+    func feedAll(_ animals: [any Animal]) {
         for animal in animals {
             feed(animal)
         }
