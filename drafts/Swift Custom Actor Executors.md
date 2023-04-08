@@ -6,9 +6,9 @@
   - [内容](#内容)
   - [詳細](#詳細)
     - [低レベルの設計](#低レベルの設計)
-    - [Executor](#executor)
+    - [Executors](#executors)
     - [Serial Executors](#serial-executors)
-    - [Jobs](#jobs)
+    - [ExecutorJobs](#executorjobs)
     - [カスタムのSerialExecutorを持つActor](#カスタムのserialexecutorを持つactor)
     - [Executorのアサーション](#executorのアサーション)
   - [Actor executorsの推論](#actor-executorsの推論)
@@ -17,7 +17,7 @@
     - [同じ実行コンテキストを提供する異なるExecutor](#同じ実行コンテキストを提供する異なるexecutor)
     - [デフォルトのSwiftランタイムExecutor](#デフォルトのswiftランタイムexecutor)
   - [ソース互換性](#ソース互換性)
-  - [ABI stabilityへの影響](#abi-stabilityへの影響)
+  - [ABI安定への影響](#abi安定への影響)
   - [APIレジリエンスへの影響](#apiレジリエンスへの影響)
   - [代替案](#代替案)
   - [将来の検討](#将来の検討)
@@ -44,13 +44,13 @@ Swift Concurrencyのデザインは、コードが実際に実行される方法
 
 それにもかかわらず、コードが実行される方法をより細かく制御することは、時には便利である。
 
-- コードは、ある特定の方法でコードを実行することを期待する既存のシステムと協力する必要がある可能性がある  
+- コードは、ある特定の方法でコードを実行することを期待する既存のシステムと協力する必要があるかもしれない  
   
   例えば、あるプラットフォームではUIコードをメインスレッドで実行する必要があったり、シングルスレッドのイベントループ型ランタイムは、ランタイム自身が所有・管理する同じスレッドからすべての呼び出しが行われると仮定するなど、システムはある種のタスクを特殊な方法でスケジュールするよう求めているかもしれない。  
   
   別の例として、プロジェクトには、共有のキューで何らかの状態を保護する既存のコードが大量に存在する場合がある。原理的には、これはActorパターンであり、Actorを使ってコードを書き換えることができる。しかし、それを行うことは不可能であるか、少なくともすぐに行うことは非現実的であるかもしれない。ActorのExecutorとして既存のキューを使用することで、より徐々にActorを導入していくことができる。
 
-- コードは、特定のシステムスレッドで実行されることに依存する場合がある  
+- コードは、特定のシステムスレッドで実行に依存する場合がある  
   
   例えば、一部のライブラリはスレッドローカル変数に状態を保持し、間違ったスレッドでコードを実行すると、ライブラリの仮定が崩れることになる。  
   
@@ -66,7 +66,71 @@ Swift Concurrencyのデザインは、コードが実際に実行される方法
 
 ## 内容
 
-Actorが自分の好きなExecutorを持つnonisolatedなunownedExecutorプロパティを宣言することで、実行を要求されるExecutorを宣言できるようにすることを提案する。
+開発者がシンプルなSerial Executorを実装できるようにし、それをActorで使用することで、「独自のSerial Executorと持つActor」上で実行されるコードが適切なスレッドやコンテキストで実行されるようにすることを提案する。素朴なExecutorの実装は次のような形となる。
+
+```swift
+final class SpecificThreadExecutor: SerialExecutor {
+  let someThread: SomeThread // ある特定のスレッドへの簡易的なハンドル
+
+  func enqueue(_ job: consuming ExecutorJob) {
+    let unownedJob = UnownedExecutorJob(job) // run{}クロージャ内へescapeするため
+    someThread.run {
+      unownedJob.runSynchronously(on: self)
+    }
+  }
+
+  func asUnownedSerialExecutor() -> UnownedSerialExecutor {
+    UnownedSerialExecutor(ordinary: self)
+  }
+}
+
+extension SpecificThreadExecutor {
+  static var sharedUnownedExecutor: UnownedSerialExecutor {
+    // ... ある共通設定がされたインスタンスを使い返却する ...
+  }
+}
+```
+
+このようなExecutorは、`unownedExecutor`プロパティを実装することで、`actor`宣言で使用することができる。
+
+```swift
+actor Worker {
+  nonisolated var unownedExecutor: UnownedSerialExecutor { 
+    // 前述の特定のスレッドを共有したExecutorを使用する
+    // 代わりに、このactorのinit()に特定のExecutorを渡し、保存してこの方法と同じように使用することもできる
+    SpecificThreadExecutor.sharedUnownedExecutor
+  }
+}
+```
+
+そして最後に、他のConcurrencyモデルからCustom ExecutorによるSwift Concurrencyへの移行中の信頼性を高めるために、コードの一部が適切なExecutor上で実行されていることを保証する方法も提供する。これらの方法は、要件を静的に表現するためのよりよい方法がない場合にのみ使用されるべきである。たとえば、コードを特定のActor上のメソッドとして表現したり、`@GlobalActor`でアノテートしたりすることは、可能であればアサーションよりも優先されるべきだが、古いコードが同期プロトコルの要件を満たしているにもかかわらず、スレッドに関する要件が残っているためにこれが不可能な場合もある。
+
+同期的なコードで適切なExecutorが使用されていることをアサートするには、次のようにする。
+
+```swift
+func synchronousButNeedsMainActorContext() {
+  // MainActorのコンテキストで実行されているかチェックする(されていない場合はクラッシュする)
+  MainActor.preconditionIsolated()
+  
+  // preconditionと同じ、ただしDEBUGビルドの場合のみ
+  MainActor.assertIsolated()
+}
+```
+
+さらに、Actorの実行コンテキストを安全に「想定」するための新しいAPIも提供している。たとえば、ある同期関数は常に`MainActor`から呼び出されることがわかっているものの、何らかの理由で`@MainActor`を使用することができないとする。この新しいAPIでは、適切な実行コンテキストを想定し(または別の実行コンテキストから呼び出された場合はクラッシュし)、内部の任意の状態には`MainActor`のExecutorに守られて同期的にアクセスする安全性も備えている。
+
+```swift
+@MainActor func example() {}
+
+func alwaysOnMainActor() /* 同期である必要がある! */ {
+  MainActor.assumeIsolated { // MainActorのExecutorから呼び出されないとクラッシュする
+    example() // 安全に、同期的に、呼び出すことができる
+  }
+}
+
+// しかし、それを仮定するよりも、グローバルActorを使用するメソッドをアノテートする方が常に好ましい
+@MainActor func alwaysOnMainActor() /* 同期である必要がある! */ { } // よりよいが、常に可能とは限らない
+```
 
 ## 詳細
 
@@ -74,11 +138,11 @@ Actorが自分の好きなExecutorを持つnonisolatedなunownedExecutorプロ�
 
 ExecutorのAPI設計は、高性能な実装をサポートすることを目的としており、Custom Executorは主にエキスパートによって実装されることを想定している。そのため、以下の設計では、考えられる他のほとんどの目標よりも、抽象化コストを確実に排除することに重点を置いている。特に、プロトコルによって指定される atomic な操作は、一般に、実装が正しく使用することを要求される不透明で unsafe な型によって表現される。これらの操作は、Swift Concurrencyの高レベルの言語操作と同様に、より便利な API を実装するために使用される。
 
-### Executor
+### Executors
 
 最初に、次に説明するすべての特定の種類の Executorの親プロトコルとして機能する、`Executor`プロトコルを紹介する。これは最も単純な種類の　Executorで、投入されたタスクについていかなる順序の保証も提供しない。Executorは、送られてきたJobを並行して実行するか、順次実行するかを決定することができる。
 
-このプロトコルは Swift Concurrencyの導入以来ずっと Swift に存在していたが、この提案では、言語内で新しく導入された move-only 機能を利用するために、その API を改訂します。既存の `UnownedJob`API は、move-only `Job`を受け入れるものの代わりに、非推奨となります。`UnownedJob`型は利用可能なままです(そして同様に安全ではない)。なぜなら、今日でもいくつかの使用パターンは、move-only型の最初の改訂版ではサポートされていないため。
+このプロトコルは Swift Concurrencyの導入以来ずっと Swift に存在していたが、この提案では、言語内で新しく導入された move-only 機能を利用するために、その API を改訂します。既存の `UnownedExecutorJob`API は、move-only `Job`を受け入れるものの代わりに、非推奨となります。`UnownedExecutorJob`型は利用可能なままです(そして同様に安全ではない)。なぜなら、今日でもいくつかの使用パターンは、move-only型の最初の改訂版ではサポートされていないため。
 
 Concurrencyのランタイムは、Executorの`enqueue(_:)`メソッドを使用して、与えられたExecutorにあるタスクをスケジュールする。
 
@@ -90,30 +154,30 @@ public protocol Executor: AnyObject, Sendable {
   // そのため、冗長な witness-table エントリを取得する。
   // これにより、基本的なタスクスケジューリング操作のために、根本のプロトコルまで掘り下げて探すことを避けることができる。
   @available(SwiftStdlib 5.9, *)
-  func enqueue(_ job: __owned Job)
+  func enqueue(_ job: consuming ExecutorJob)
 
   @available(SwiftStdlib 5.1, *)
-  @available(*, deprecated, message: "Implement the enqueue(Job) method instead")
-  func enqueue(_ job: UnownedJob)
+  @available(*, deprecated, message: "Implement the enqueue(_:ExecutorJob) method instead")
+  func enqueue(_ job: UnownedExecutorJob)
 }
 ```
 
-既存のAPIからのマイグレーションを支援するために、コンパイラは `Hashable.hashValue`から `Hashable.hash(into:)`へのマイグレーションの方法と同様の支援を提供する予定である。`enqueue(UnownedJob)`を実装した既存の Executor実装はまだ動作するが、非推奨の警告が表示される。
+既存のAPIからのマイグレーションを支援するために、コンパイラは `Hashable.hashValue`から `Hashable.hash(into:)`へのマイグレーションの方法と同様の支援を提供する予定である。`enqueue(UnownedExecutorJob)`を実装した既存の Executor実装はまだ動作するが、非推奨の警告が表示される。
 
 ```swift
 final class MyOldExecutor: SerialExecutor {
-  // WARNING: 'Executor.enqueue(UnownedJob)' is deprecated as a protocol requirement;
-  //          conform type 'MyOldExecutor' to 'Executor' by implementing 'enqueue(Job)' instead
-  func enqueue(_ job: UnownedJob) {
+  // WARNING: 'Executor.enqueue(UnownedExecutorJob)' is deprecated as a protocol requirement;
+  //          conform type 'MyOldExecutor' to 'Executor' by implementing 'enqueue(ExecutorJob)' instead
+  func enqueue(_ job: UnownedExecutorJob) {
     // ...
   }
 }
 ```
 
-Executorは、そのJob を実行するときに、特定の順序規則に従うことが要求される。
+Executorは、そのExecutorJobを実行するときに、特定の順序規則に従うことが要求される。
 
-- `SerialExecutor.runJobSynchronously(_:)`の呼び出しは、`enqueue(_:)`の呼び出しの後に起こらなければならない
-- もし、Executorが SerialなExecutorであれば、すべてのJobの実行は完全に順序付けられなければならないり。`enqueue(_:`)で同じ Executorに投入された2つの異なるJobAとBに対して、AのすべてのイベントがBのすべてのイベントの前に起こるか、BのすべてのイベントがAのすべてのイベントよりも先に起こらなければならない(happen-before)
+- `ExecutorJob.runJobSynchronously(_:)`の呼び出しは、`enqueue(_:)`の呼び出しの後に起こらなければならない
+- もし、ExecutorがSerialなExecutorであれば、すべてのJobの実行は*完全に順序付けられなければならない*。`enqueue(_:`)で同じ Executorに投入された2つの異なるJobAとBに対して、AのすべてのイベントがBのすべてのイベントの前に起こるか、BのすべてのイベントがAのすべてのイベントよりも先に起こらなければならない(happen-before)
   - 例えば、一方のJobの優先度が他方より高い場合など。しかし、A と B はそれぞれ独立して、他方が実行される前に完了しなければならないことに注意する必要がある
 
 ### Serial Executors
@@ -136,6 +200,9 @@ public protocol SerialExecutor: Executor {
   /// Executorへの参照にする。
   @available(SwiftStdlib 5.1, *)
   func asUnownedSerialExecutor() -> UnownedSerialExecutor
+
+  // この提案の「same executorチェックの詳細」で詳しく解説している
+  func isSameExclusiveExecutionContext(other executor: Self) -> Bool
 }
 
 @available(SwiftStdlib 5.9, *)
@@ -144,132 +211,126 @@ extension SerialExecutor {
   func asUnownedSerialExecutor() -> UnownedSerialExecutor {
     UnownedSerialExecutor(ordinary: self)
   }
+
+  func isSameExclusiveExecutionContext(other: Self) -> Bool {
+    self === other
+  }
 }
 ```
 
 `SerialExecutor`は、参照カウントのオーバーヘッドを発生させずに Executorを渡すために Swift ランタイムによって使用される `UnownedSerialExecutor`でそれ自体をラップすること以外、新しい API を導入していない。
 
 ```swift
-/// `SerialExecutor`への未所有の参照値。
+/// `SerialExecutor`へのunownedの参照値。
 /// これは、コアのスケジューリング処理で内部的に使用される最適化された型である。
-/// 抽象的にActor を扱う場合でも、不必要な参照カウントを避けるために、unowned 参照となっている。
+/// 抽象的にActorを扱う場合でも、不必要な参照カウントを避けるために、unowned参照となっている。
 /// 一般に、これを可能にするためにコア操作に課される特別な制約がある。
 /// 例えば、Actor を生存させるためには Actor に関連する Executorも生存させておかなければならない。
 /// これらが異なるオブジェクトである場合、Executorは Actor から強く参照されなければならない。
 @available(SwiftStdlib 5.1, *)
 @frozen
 public struct UnownedSerialExecutor: Sendable {
-  public init<E: SerialExecutor>(ordinary executor: __shared E)
+  /// unownedのSerialExecutorを公開するための、デフォルトかつ通常の方法
+  public init<E: SerialExecutor>(ordinary executor: E)
+
+  // この提案の「same executorチェックの詳細」で詳しく解説している
+  public init<E: SerialExecutor>(complexEquality executor: E)
 }
 ```
 
 `SerialExecutor`は、カスタムの Executorを使用するときに発生するスレッドスイッチの量を減らすことができる 「スイッチング」 をサポートするように拡張される可能性がある。この拡張の議論については、将来の方向性を参照。
 
-### Jobs
+### ExecutorJobs
 
-`Job`は、Executorが実行すべきタスクのかたまりを表現したものです。例えば、`Task`は事実上、実行するために Executorに enqueue された一連の Job から構成されています。Swift Concurrencyで作成される最も一般的なタイプのJobが「部分タスク」であるにもかかわらず、この API を「部分タスク」だけに制限したり、タスクとあまり密接に結びつけたくないので、「Job」という名前が選ばれました。
+`ExecutorJob`は、Executorが実行すべきタスクのかたまりを表現したものです。例えば、`Task`は事実上、実行するために Executorに enqueue された一連の ExecutorJob から構成されています。Swift Concurrencyで作成される最も一般的なタイプのExecutorJobが「部分タスク」であるにもかかわらず、この API を「部分タスク」だけに制限したり、タスクとあまり密接に結びつけたくないので、「ExecutorJob」という名前が選ばれました。
 
-Swift Concurrencyが何らかのタスクを実行する必要があるときはいつでも、Job が実行されるべき特定のExecutor上で `UnownedJobs`をenqueueします。`UnownedJob`型は、Swiftの低レベルの Job 表すopaqueなラッパーです。それは意味のある検査やコピーはできず、決して2回以上実行されてはいけません。
+Swift Concurrencyが何らかのタスクを実行する必要があるときはいつでも、ExecutorJob が実行されるべき特定のExecutor上で `UnownedExecutorJobs`をenqueueします。`UnownedExecutorJob`型は、Swiftの低レベルの ExecutorJob 表すopaqueなラッパーです。それは意味のある検査やコピーはできず、決して2回以上実行されてはいけません。
 
 ```swift
-@available(SwiftStdlib 5.9, *)
-@_moveOnly
-public struct Job: Sendable {
-  /// このJobの優先順位を返す。
-  ///
-  /// Jobがタスクの場合、Jobの優先度はTaskPriorityと等しくなる。
-  public var priority: Priority { get }
-}
-
-@available(SwiftStdlib 5.9, *)
-extension Job {
- // TODO: JobPriorityは、技術的にはTaskPriorityと同じ。
-  // しかし、"Task..." という名前のAPIを、タスクでないJobに対して公開するのは、間違っているように感じる。
-  // タスクだけではない可能性がある。
-  //
-  // TODO: 別の方法として、ここで`Priority = TaskPriority`という型付けをすることができる。
-  public struct Priority {
-    public typealias RawValue = UInt8
-    public var rawValue: RawValue
-
-    /// この`UnownedJob/Priority`は`TaskPriority`に変換される。
-    public var asTaskPriority: TaskPriority? { ... }
-
-    public var description: String { ... }
-  }
+@noncopyable
+public struct ExecutorJob: Sendable {
+  /// ExecutorJobの優先順位
+  public var priority: JobPriority { get }
 }
 ```
 
-この言語機能の最初の初期の反復におけるmove-only型にはまだ多くの制限があるため、私たちは `UnownedJob`型も提供している。これはJobの安全でない「未所有」バージョンである。`UnownedJob`を必要とする理由の1つは、Jobが一般的なコンテキストで使用される場合。なぜなら、現在利用可能なmove-only型の初期バージョンでは、そのような型は一般的なコンテキストで表示できないためである。例えば、[Job]を使った素朴なキュー実装はコンパイラに拒否されるが、`UnownedJob`(つまり[UnownedJob])を使った表現なら可能。
+```swift
+/// このジョブの優先順位
+///
+/// 優先度情報がタスクのスケジューリング方法にどのように影響するかは、Executorが決定する
+/// 動作は、現在使用されているExecutorによって異なる
+/// 一般的に、Executorは優先順位の高いタスクを優先順位の低いタスクの前に実行しようとする
+/// しかし、優先順位がどのように扱われるかのセマンティクスは、各プラットフォームと `Executor` の実装に任されている
+///
+/// ExecutorJobの優先順位は`TaskPriority`とほぼ同じである。ただし、すべてのジョブがタスクであるわけではないので、別の型として表現する
+///
+/// 2つの優先順位間の変換は、それぞれの型のイニシャライザとして利用可能である
+public struct JobPriority {
+  public typealias RawValue = UInt8
+
+  /// 生の優先順位の値
+  public var rawValue: RawValue
+}
+
+extension TaskPriority {
+  /// ジョブの優先順位をタスクの優先順位に変換する
+  ///
+  /// ほとんどの値は直接交換可能だが、このイニシャライザは、特定の値に対して失敗する権利を留保する
+  public init?(_ p: JobPriority) { ... }
+}
+```
+
+この言語機能の最初の初期の反復におけるmove-only型にはまだ多くの制限があるため、私たちは `UnownedExecutorJob`型も提供している。これはExecutorJobの安全でない「未所有」バージョンである。`UnownedExecutorJob`を必要とする理由の1つは、ExecutorJobが一般的なコンテキストで使用される場合。なぜなら、現在利用可能なmove-only型の初期バージョンでは、そのような型は一般的なコンテキストで表示できないためである。例えば、[ExecutorJob]を使った素朴なキュー実装はコンパイラに拒否されるが、`UnownedExecutorJob`(つまり[UnownedExecutorJob])を使った表現なら可能。
 
 ```swift
 
-@available(SwiftStdlib 5.1, *)
-@frozen
-public struct UnownedJob: Sendable, CustomStringConvertible {
-  /// move-onlyのJobを消費して、安全でない、unownedなJobを作成する。
+public struct UnownedExecutorJob: Sendable, CustomStringConvertible {
+  /// move-onlyのExecutorJobを消費して、安全でない、unownedなExecutorJobを作成する。
   ///
-  /// これは現在、コレクションにJobを格納することを意図しているときに必要かもしれない。
+  /// これは現在、コレクションにExecutorJobを格納することを意図しているときに必要かもしれない。
   /// あるいは、move-only型の初期の実装の制約でジェネリックを使用しない場合に必要かもしれまない。
-  @available(SwiftStdlib 5.9, *)
   @usableFromInline
-  internal init(_ job: __owned Job) { ... }
+  internal init(_ job:　consuming ExecutorJob) { ... }
 
-  @available(SwiftStdlib 5.9, *)
-  public var priority: Priority { ... }
+  public var priority: JobPriority { ... }
 
   public var description: String { ... }
 }
 ```
 
-Jobのdescriptionには、JobまたはタスクIDが含まれる。これは、タスクのdump、Instrumentsや他のデバッグツール(`swift-inspect`など)のタスクリストと関連付けるために使用される。タスクIDは、タスクに割り当てられた一意の番号で、スケジューリング問題をデバッグする際に役立つ。これは、現在、タスクを検査する際にInstrumentsなどのツールで公開されているものと同じIDで、デバッグログとプロファイルツールの観察結果と関連付けることができる。
+ExecutorJobのdescriptionには、ExecutorJobまたはタスクIDが含まれる。これは、タスクのdump、Instrumentsや他のデバッグツール(`swift-inspect`など)のタスクリストと関連付けるために使用される。タスクIDは、タスクに割り当てられた一意の番号で、スケジューリング問題をデバッグする際に役立つ。これは、現在、タスクを検査する際にInstrumentsなどのツールで公開されているものと同じIDで、デバッグログとプロファイルツールの観察結果と関連付けることができる。
 
-最終的には、Executorは実際にJobを実行したいと思うだろう。それは、それがenqueueされたときにすぐに行うかもしれないし、別のスレッドかもしれない。これはExecutorに完全に決定が任されている。Jobの実行は `SerialExecutor`プロトコルで提供されている `runJobSynchronously`メソッドを呼び出すことで行われる。
+最終的には、Executorは実際にExecutorJobを実行したいと思うだろう。それは、それがenqueueされたときにすぐに行うかもしれないし、別のスレッドかもしれない。これはExecutorに完全に決定が任されている。ExecutorJobの実行は `SerialExecutor`プロトコルで提供されている `runJobSynchronously`メソッドを呼び出すことで行われる。
 
 `Job`の実行は`Job`をconsumeするため、誤って同じ`Job`を2回実行することはできない。それが許されるなら、それはundefineな挙動になるだろう。
 
 ```swift
-@available(SwiftStdlib 5.9, *)
-extension SerialExecutor {
-  /// Jobを同期的に実行する。
+extension ExecutorJob {
+  /// ExecutorJobを同期的に実行する。
   ///
-  /// これはJobを消費する。
-  @_alwaysEmitIntoClient
-  @inlinable
-  public func runJobSynchronously(_ job: __owned Job) {
-    _swiftJobRun(UnownedJob(job), self)
-  }
-
-  /// Jobを同期的に実行する。
-  ///
-  /// Jobは「一度だけ」実行する。実行後にJobにアクセスすると不定の挙動になる。
-  /// - Parameter job:
-  @_alwaysEmitIntoClient
-  @inlinable
-  public func runUnownedJobSynchronously(_ job: UnownedJob) {
-    _swiftJobRun(job, self)
+  /// これはExecutorJobを消費する。
+  public consuming func runSynchronously(on executor: UnownedSerialExecutor) {
+    _swiftJobRun(UnownedExecutorJob(job), executor)
   }
 }
 
-@available(SwiftStdlib 5.9, *)
-extension UnownedSerialExecutor {
-  @_alwaysEmitIntoClient
-  @inlinable
-  public func runJobSynchronously(_ job: __owned Job)
-
-  @_alwaysEmitIntoClient
-  @inlinable
-  public func runUnownedJobSynchronously(_ job: UnownedJob)
+extension UnownedExecutorJob {
+  /// ExecutorJobを同期的に実行する。
+  ///
+  /// ExecutorJobは「一度だけ」実行する。実行後にExecutorJobにアクセスすると不定の挙動になる。
+  public func runSynchronously(on executor: UnownedSerialExecutor) {
+    _swiftJobRun(job, executor)
+  }
 }
 ```
 
 ### カスタムのSerialExecutorを持つActor
 
-すべてのActorは暗黙に Actor(またはDistributedActor)プロトコルに準拠しており、これらのプロトコルには `unownedExecutor`というプロパティの形で実行するExecutorのカスタマイズポイントが含まれている。
+すべてのActorは暗黙に Actor(またはDistributed Actor)プロトコルに準拠しており、これらのプロトコルには `unownedExecutor`というプロパティの形で実行するExecutorのカスタマイズポイントが含まれている。
 
 ActorのExecutorは、`Executor`プロトコルを詳細にした`SerialExecutor`プロトコルに準拠しなればならず、Actorの排他制御の保証を実装するために、十分な保証を提供する。将来的には、`SerialExecutor`は 「スイッチング」をサポートするように拡張されるかもしれない。これは、Executorが現在実行中のスレッドを互いに「貸し出す」ことができる互換性を持つActor間の呼び出しで、スレッドスイッチングを回避するための技術である。この提案では、このスイッチングのセマンティクスはカバーしない。
 
-Actorは、タスクを実行するためにどの`SerialExecutor`を使用すべきかを選択することは、`Actor`および`DistributedActor`プロトコルの`unownedExecutor`要件によって表現される。
+Actorは、タスクを実行するためにどの`SerialExecutor`を使用すべきかを選択することは、`Actor`および`Distributed Actor`プロトコルの`unownedExecutor`要件によって表現される。
 
 ```swift
 public protocol Actor: AnyActor {
@@ -284,8 +345,42 @@ public protocol Actor: AnyActor {
   nonisolated var unownedExecutor: UnownedSerialExecutor { get }
 }
 
-public protocol DistributedActor: AnyActor {
-  /// ...
+public protocol Distributed Actor: AnyActor {
+  /// この分散ActorのExecutorを、最適化された非所有の参照として取得します。
+  /// このAPIは `Actor/unownedExecutor`と同等である
+  ///
+  /// ## リモートDistributed Actor参照のExecutor
+  ///
+  /// これは `buildDefaultDistributedRemoteActorExecutor(any Distributed Actor)` メソッドを使用して取得できる
+  /// Distributed ActorのカスタムExecutorを実装する場合、実装は各Actorが持つ `nonisolated var id` からそのExecutorの値を導き出すことができます(例えば、`ID` が何らかの「Executorの好み」を示すことによって）
+  /// しかし、Actorがリモートであれば、デフォルトの実装が行うのと同じDistributed ActorのExecutorを返す**べき**です
+  
+  ///
+  /// なぜなら、このプロセスのコードは、
+  /// そのような分散Actor上で分離されたクロスActorを呼び出すことができるメソッドを実行することはなく、
+  /// 単にリモートコールを実行するために ``Distributed ActorSystem/remoteCall` に委ねるからです。
+  /// この呼び出しはActorシステム上で実行され、Actorに分離されることはありません。
+  ///
+  /// リモートActor参照は決して `isolated` することができないので、
+  /// リモート分散Actor参照用の共有Executorを返しても、
+  /// swiftランタイムを「騙して」`assumeIsolated()`してリモートActorに分離したコードを実行することを
+  /// 誤って許可することはない。
+  ///
+  /// ## 可用性
+  ///
+  /// 分散Actorは、その可用性が Swift5.9(またはそれ以上)が存在するプラットフォームを必要とする場合にのみ、
+  /// カスタムExecutorを使用できる。
+  /// 可用性アノテーションのないプラットフォームでは、Distributed Actorは常にそうである  
+  ///
+  /// ## カスタム実装の要件
+  ///
+  /// このプロパティは、与えられたActorインスタンスに対して常に同じExecutorとして評価されなければならず、
+  /// Actorを保持することでExecutorが生き続ける必要がある
+  ///
+  /// このプロパティは、仕事がこのActorにスケジュールされる必要があるときに、暗黙的にアクセスされるだろう 
+  /// これらのアクセスは、他の作業と統合されたり、削除されたり、再配置されたりすることがあり、
+  /// 厳密に必要でない場合に導入されることさえある 
+  /// 目に見える副作用は、このプロパティ内では強く推奨されない
   nonisolated var unownedExecutor: UnownedSerialExecutor { get }
 }
 
@@ -318,13 +413,6 @@ func mainGreet() {
 func test() {
   Task { await mainGreet() }
   Task { await MainActorsBestFriend().greet() }
-  // 合法な実行:
-  // 1)
-  //   - Main-friendly... hello!
-  //   - Main hello!
-  // 2)
-  //   - Main hello!
-  //   - Main-friendly... hello!
 }
 ```
 
@@ -378,9 +466,10 @@ actor MyActor: WithSpecifiedExecutor {
 
 まだ Swift Concurrencyを使用していないイベントループの重いコードでよくあるパターンは、同期コードの一部が想定したイベントループで実行されることを保証/検証することである。Executorをカスタマイズ可能にする目的の一つは、そのようなイベントループを `SerialExecutor`に適合させることで Swift Concurrencyを採用できるようにすることなので、Actorと Swift Concurrencyを完全に採用する方向に進んでいる間にライブラリが確信を得るために、コードが本当に適切なExecutorで実行されているかどうかをチェックできるようにすることは有用なことである。
 
-例えば、Swift NIO は、同期チェックのオーバーヘッドを避けるために、いくつかの同期メソッドで意図的に同期チェックを避けているが、DEBUGモードでは、与えられたコードが期待されるイベントループで実行されていることをassertしている。
+例えば、Swift NIOは、同期チェックのオーバーヘッドを避けるために、いくつかの同期メソッドで意図的に同期チェックを避けているが、DEBUGモードでは、与えられたコードが期待されるイベントループで実行されていることをassertしている。
 
 ```swift
+// Swift NIO
 private var _channel: Channel
 internal var channel: Channel {
   self.eventLoop.assertInEventLoop()
@@ -392,6 +481,7 @@ internal var channel: Channel {
 Dispatchベースのシステムにも同様の機能があり、`dispatchPrecondition`というAPIがある。
 
 ```swift
+// Dispatch
 func checkIfMainQueue() {
   dispatchPrecondition(condition: .onQueue(DispatchQueue.main))
 }
@@ -412,25 +502,61 @@ extension Worker {
 時には、特に既存のコードベースを Swift Concurrencyに移行するとき、それが期待されるExecutor上で実行されているかどうかを同期コードでassertする機能がSwift Concurrencyへの移行中に開発者にもっと確信をもたらすことができることを私たちは認識している。これらの移行をサポートするために、我々は以下の方法を提案する。
 
 ```swift
+extension SerialExecutor {
+  /// 現在のタスクが期待されるExecutor上で実行されているかどうかをチェックする。
+  ///
+  /// 複数のActorが同じSerialExecutorを共有する場合、このassertionは特定のActorインスタンスではなく、Executorをチェックすることに注意。
+  ///
+  /// 一般的に、Swiftのプログラムは、Global ActorやCustom Executorを使用するなどして、特定のExecutorが使用されていることが静的にわかるように構築する必要がある。
+  /// しかし、いくつかのAPIでは、特にこのようなassertionを頻繁に使用する他のランタイムからSwift Concurrencyに移行する場合、このための追加の実行時チェックを提供することが有用な場合がある。
+  public func preconditionIsolated(
+    _ message: @autoclosure () -> String = "",
+    file: String = #fileID, line: UInt = #line)
+}
 
-/// 現在のタスクが期待されるExecutor上で実行されているかどうかをチェックする。
-///
-/// 複数のActorが同じSerialExecutorを共有する場合、このassertionは特定のActorインスタンスではなく、Executorをチェックすることに注意。
-///
-/// 一般的に、Swiftのプログラムは、Global ActorやCustom Executorを使用するなどして、特定のExecutorが使用されていることが静的にわかるように構築する必要がある。
-/// しかし、いくつかのAPIでは、特にこのようなassertionを頻繁に使用する他のランタイムからSwift Concurrencyに移行する場合、このための追加の実行時チェックを提供することが有用な場合がある。
-@available(SwiftStdlib 5.9, *)
-public func preconditionTaskIsOnExecutor(
-  _ executor: some Executor,
-  _ message: @autoclosure () -> String = "",
-  file: String = #fileID, line: UInt = #line)
+extension Actor {
+  public nonisolated func preconditionIsolated(
+    _ message: @autoclosure () -> String = "",
+  	file: String = #fileID, line: UInt = #line)
+}
 
-// preconditionTaskIsOnExecutor(_:_:file:line)と同じだが、DEBUGモードのみ
-@available(SwiftStdlib 5.9, *)
-public func assertTaskIsOnExecutor(
-_ executor: some Executor,
-_ message: @autoclosure () -> String = "",
-file: String = #fileID, line: UInt = #line)
+extension Distributed Actor {
+  public nonisolated func preconditionIsolated(
+    _ message: @autoclosure () -> String = "",
+  	file: String = #fileID, line: UInt = #line)
+}
+```
+
+また、このAPIの`assert...`バージョンもあり、Debugビルドでのみトリガーされる。
+
+```swift
+extension SerialExecutor {
+  // Same as ``SerialExecutor/preconditionIsolated(_:file:line)`` however only in DEBUG mode.
+  public func assertIsolated(
+    _ message: @autoclosure () -> String = "",
+	  file: String = #fileID, line: UInt = #line)
+}
+
+extension Actor {
+  // Same as ``Actor/preconditionIsolated(_:file:line)`` however only in DEBUG mode.
+  public nonisolated func assertIsolated(
+    _ message: @autoclosure () -> String = "",
+	  file: String = #fileID, line: UInt = #line)
+}
+
+extension Distributed Actor {
+  // Same as ``Distributed Actor/preconditionIsolated(_:file:line)`` however only in DEBUG mode.
+  public nonisolated func assertIsolated(
+    _ message: @autoclosure () -> String = "",
+	  file: String = #fileID, line: UInt = #line)
+}
+```
+
+`Actor`と`Distributed Actor`で提供されるAPIのバージョンは、不一致の際に実際にアクティブなexecutorの説明を提供するため、開発者が何らかの`precondition(isOnExpectedExecutor)(someExecutor)`で実装するよりも優れた診断が可能である。
+
+```swift
+MainActor.preconditionIsolated()
+// Precondition failed: Incorrect actor executor assumption; Expected 'MainActorExecutor' executor, but was executing on 'Sample.InlineExecutor'.
 ```
 
 このAPIは2つのActorがExecutorを共有するときは常にtrueを返すことに注意する必要がある。SerialExecutorを共有することは同じ分離された領域で実行することを意味するが、これは動的にしか分からないため、そのようなActor間の呼び出しには待ち時間が必要である。
@@ -458,7 +584,7 @@ actor B {
 ## Actor executorsの推論
 
 > 注：このAPIは当初、Custom Executorとは別に提案されましたが、この機能に取り組むうちに、Custom ExecutorやExecutorでのアサーションととても密接に関係しているかがわかった。最初のピッチのスレッドは[Pitch: MainActorの安全でないアサート](https://forums.swift.org/t/pitch-unsafe-assume-on-mainactor/63074/)。
-この提案の改訂版では、`assumeOnMainActorExecutor(_:)`メソッドを導入し、同期コードがMainActorのExecutorのコンテキスト内で呼び出されたことを安全に推論できるようにした。非同期コードでこの要件を満たすには、`@MainActor`を使用して関数をアノテートし、静的にこの要件を保証するのが正しい方法だからである。
+この提案の改訂版では、`MainActor.assumeIsolated(_:)`メソッドを導入し、同期コードがMainActorのExecutorのコンテキスト内で呼び出されたことを安全に推論できるようにした。非同期コードでこの要件を満たすには、`@MainActor`を使用して関数をアノテートし、静的にこの要件を保証するのが正しい方法だからである。
 
 同期コードは、このassumeメソッドを使用することで、MainActorのExecutor上で実行されていると推論することができる:
 
@@ -469,19 +595,19 @@ actor B {
 /// - 注意：MainActorとの競合状態を防ぐため、別の実行コンテキストから呼び出された場合、
 /// このメソッドはクラッシュする。
 @available(*, noasync)
-func assumeOnMainActorExecutor<T>(
+func assumeIsolated<T>(
     _ operation: @MainActor () throws -> T,
     file: StaticString = #fileID, line: UInt = #line
 ) rethrows -> T
 ```
 
-assertやprecondition APIと同様に、このチェックはActorのExecutorに対して行われるため、複数のActorが同じExecutor上で実行されている場合、そのActorから起動された同期コードでもこのチェックは成功しする。つまり、以下のようなコードも正しい:
+`preconditionIsolated` APIと同様に、このチェックはActorのExecutorに対して行われるため、複数のActorが同じExecutor上で実行されている場合、そのActorから起動された同期コードでもこのチェックは成功する。つまり、以下のようなコードも正しい:
 
 ```swift
 
 func check(values: MainActorValues) /* synchronous! */ {
   // values.get("any") // error: main actor isolated, cannot perform async call here
-  assumeOnMainActorExecutor {
+  MainActor.assumeIsolated {
     values.get("any") // 正しい&安全
   }
 }
@@ -508,25 +634,64 @@ final class MainActorValues {
 }
 ```
 
-> 注: `@SomeActor () -> T`関数型のGlobalActorの分離を抽象化することはできないので、現在、私たちはこのAPIのバージョンを任意のGlobalActorに対して提供していない。しかし、マクロを使用して今日そのようなAPIを実装することは可能であり、十分に重要だと見なされればフォローアップの提案で説明できるはず。このようなAPIは`#assumeOnGlobalActorExecutor(GlobalActor.self)`と記述する必要がある。
+> 注: `@SomeActor () -> T`関数型のGlobalActorの分離を抽象化することはできないので、現在、私たちはこのAPIのバージョンを任意のGlobalActorに対して提供していない。しかし、マクロを使用して今日そのようなAPIを実装することは可能であり、十分に重要だと見なされればフォローアップの提案で説明できるはず。このようなAPIは`SomeGlobalActor.assumeIsolated() { @SomeGlobalActor in ... }`と記述する必要がある。
 
-MainActorに特化したAPIに加えて、同じ形のAPIが独自のActorに提供され、提供されているActorと同じSerialExecutorで実行されることが保証されることで同時アクセス違反が起こらない場合、分離したMainActorの参照を得ることができる。
+`MainActor`に特化したAPIに加えて、同じ形のAPIがカスタムのActorに提供され、提供されているActorと同じSerialExecutorで実行されることが保証されることで同時アクセス違反が起こらない場合、`isolated`なActorの参照を得ることができる。
 
 ```swift
-@available(*, noasync)
-func assumeOnActorExecutor<Act: Actor T>(
-    _ operation: (isolated Act) throws -> T,
-    file: StaticString = #fileID, line: UInt = #line
-) rethrows -> T
-
-@available(*, noasync)
-func assumeOnLocalDistributedActorExecutor<Act: DistributedActor T>(
-    _ operation: (isolated Act) throws -> T,
-    file: StaticString = #fileID, line: UInt = #line
-) rethrows -> T
+extension Actor {
+  /// 現在の実行コンテキストが渡された `actor` に属していることを同期的に想定する安全な方法
+  ///
+  /// ActorのSerialExecutorのコンテキストで現在実行されている場合、Actorに分離された`operation`を安全に実行しする。そうでない場合は、期待されるExecutorと実際のExecutorの違いを報告してクラッシュする
+  /// 
+  /// このメソッドは、非同期コンテキストでは使用できない。代わりに、Actor上でメソッドを実装し、非同期コンテキストからそれを呼び出すことをお勧めする
+  ///
+  /// このAPIは、現在の実行コンテキストが間違いなくMainActorに属していることを他の方法で表現できない場合に、最後の手段としてのみ使用されるべき。例えば、デリゲートスタイルのAPIでこれを使用する必要があるかもしれません。そこでは、同期メソッドがMainActorによって呼び出されることが保証されているが、何らかの理由でターゲットの`Actor`に関数の実装を移動することは不可能である
+  ///
+  /// - 警告: 現在のExecutorがActorのシリアルExecutorでない場合、この関数はクラッシュする
+  ///
+  /// - パラメータ:
+  ///   - operation: Executorのチェックがパスした場合に実行される操作。
+  /// - return: 操作の結果
+  /// - Throws: 操作で発生したエラー
+  @available(*, noasync)
+  func assumeIsolated<T>(
+      _ operation: (isolated Self) throws -> T,
+      file: StaticString = #fileID, line: UInt = #line
+  ) rethrows -> T
+}
 ```
 
-これらのassumeメソッドは、チェックが特定のインスタンスではなくActorのExecutorについて実行されるという意味で、先ほど説明した`assumeOnMainActorExecutor`と同じセマンティクスを持つ。言い換えれば、多くの独自のActorが同じSerialExecutorを共有する場合、現在実行中のExecutorが同じであるとわかっている限り、このチェックはそれらのそれぞれについてパスするだろう。
+これらのassumeメソッドは、チェックが特定のインスタンスではなくActorの*Executor*について実行されるという意味で、先ほど説明した`MainActor.assumeIsolated`と同じセマンティクスを持つ。言い換えれば、多くの独自のActorが同じSerialExecutorを共有する場合、現在実行中のExecutorが同じであるとわかっている限り、このチェックはパスするだろう。
+
+同じ方法がDistributed Actorにも提供されており、コードがインスタンスに分離されるのは、その参照が*ローカル*のDistributed Actorであり、かつ、チェックしたActorが現在のタスクを実行しているのと同じSerialExecutorである場合のみである:
+
+```swift
+
+extension DistributedActor {
+  /// 現在の実行コンテキストが渡された `actor` に属していることを同期的に想定する安全な方法
+  ///
+  /// ActorのSerialExecutorのコンテキストで現在実行されている場合、Actorに分離された`operation`を安全に実行しする。Actorがローカルである場合、または現在と期待されるExecutorに互換性がない場合、期待されるExecutorと実際のExecutorの差異を報告してクラッシュする
+  /// 
+  /// このメソッドは、非同期コンテキストでは使用できない。代わりに、Distributed Actor上でメソッドを実装し、非同期コンテキストからそれを呼び出すことをお勧めする
+  /// なぜなら、リモートのDistributed Actorへの参照は、それを保存するためにいかなるメモリも割り当てないことができ、それにアクセスする試みは違法であるためである。Actorがリモートである場合、このメソッドは致命的なエラーで終了する
+  ///
+  /// このAPIは、現在の実行コンテキストが間違いなくMainActorに属していることを他の方法で表現できない場合に、最後の手段としてのみ使用されるべき。例えば、デリゲートスタイルのAPIでこれを使用する必要があるかもしれません。そこでは、同期メソッドがMainActorによって呼び出されることが保証されているが、何らかの理由でターゲットの`Distributed Actor`に関数の実装を移動することは不可能である
+  ///
+  /// - 警告: 現在のDistributed ActorがActorのSerial Executorでない場合、この関数はクラッシュする
+  ///
+  /// - パラメータ:
+  ///   - operation: Executorのチェックがパスした場合に実行される操作。
+  /// - return: 操作の結果
+  /// - Throws: 操作で発生したエラー
+
+  @available(*, noasync)
+  func assumeIsolated<T>(
+      _ operation: (isolated Self) throws -> T,
+      file: StaticString = #fileID, line: UInt = #line
+  ) rethrows -> T
+}
+```
 
 ## Executorの等価チェックの詳細
 
@@ -547,7 +712,7 @@ final class UniqueSpecificThreadExecutor: SerialExecutor {
     self.delegate = delegate
   }
   
-  func enqueue(_ job: consuming Job) {
+  func enqueue(_ job: consuming ExecutorJob) {
     delegate.enqueue(job)
   }
   
@@ -589,6 +754,8 @@ extension MyQueueExecutor {
 ```
 
 一意のイニシャライザは、「もしExecutorのポインタが同じなら、それは同じExecutorの排他的実行コンテキスト上にある」というExecutorの等価チェックは現在の高速パスのセマンティクスを維持するが、等価チェックが失敗した場合に「深いチェック」をするコードパスを追加する。
+
+> 「複雑」という言葉は、「多くの異なる部分から構成され、つながっている」という意味から選ばれたが、これはこの特徴を非常によく表している。様々なExecutorが複雑なネットワークを形成することができ、「これは同じコンテキストなのか」という問いに答えるために検査が必要な場合がある。
 
 「これは同じ（または互換性のある）シリアル実行コンテキストですか」というチェックを実行するとき、Swiftランタイムは、最初にExecutorオブジェクトへの生のポインタを比較する。それらが等しくなく、問題のExecutorが`complexEquality`を持つ場合、いくつかの追加の型チェックの後、次の`isSameExclusiveExecutionContext(other:)`メソッドが呼び出される。
 
@@ -635,7 +802,7 @@ Executorの型(ExecutorRef、特にImplementation/witnessテーブルフィー�
         - trueの場合、return(これはファストパスで、通常のExecutorと同じである)する
       - Executorの証人テーブルを比較し、互換性があるかどうかを確認する
         - falseの場合、returnする
-      - Executorに実装された`executor1.isSameExclusiveExecutionContext(executor2)`を呼び出す
+      - Executorに実装された`currentExecutor.isSameExclusiveExecutionContext(expectedExecutor)`を呼び出す
         - 結果を返す
 
 これらのチェックは、タスクの切り替えを完全に最適化するには不十分である可能性が高く、将来的にはタスクの切り替えを最適化する他のメカニズムが提供される予定である(「将来の検討」参照)。
@@ -647,10 +814,9 @@ SwiftのConcurrencyでは、MainActorのExecutorやデフォルトのglobal conc
 `MainActor`のExecutorは、`MainActor`上の`sharedUnownedExecutor`staticプロパティを介して利用可能。
 
 ```swift
-@available(SwiftStdlib 5.1, *)
 @globalActor public final actor MainActor: GlobalActor {
-  public nonisolated var unownedExecutor: UnownedSerialExecutor
-  public static var sharedUnownedExecutor: UnownedSerialExecutor
+  public nonisolated var unownedExecutor: UnownedSerialExecutor { get { ... } }
+  public static var sharedUnownedExecutor: UnownedSerialExecutor { get { ... } }
 }
 ```
 
@@ -664,7 +830,9 @@ actor Friend {
 }
 ```
 
-デフォルトのglobal concurrent Executorは、現在、置き換えができない。
+MainActor Executorの生の型は決して公開されないが、我々は単にそれのためのunownedのラッパーを取得することに注意して。これは、Swiftランタイムがランタイム環境に応じて様々な特定の実装を選択することを可能にする。
+
+デフォルトのGlobal Concurrent Executorは、コードから直接アクセスできませんが、特定のExecutor要件を持っていない、またはトップレベルの非同期関数のような、そのExecutor上で実行するように明示的に要求されているすべてのタスクを処理するExecutorである。
 
 ## ソース互換性
 
@@ -672,11 +840,11 @@ actor Friend {
 
 以前からある("unowned")APIを非推奨としながら、ソース互換性のある方法でmove-only JobベースのenqueueAPIを導入するために、特別な余地がある。
 
-## ABI stabilityへの影響
+## ABI安定への影響
 
 Swift COncurrencyランタイムは、最初の導入以来、すでにExecutor、Job、タスクを使用しており、そのため、この提案は、既存のすべてのランタイムエントリーポイントと型とのABI互換性を維持している。
 
-`SerialExecutor`の設計は現在、non reentrantなActorをサポートしておらず、常に同期的にディスパッチがするExecutorもサポートしていない(例えば、従来のmutexを取得するだけなど)。
+`SerialExecutor`の設計は現在、リエントラント不可のActorをサポートしておらず、常に同期的にディスパッチするExecutorもサポートしていない(例えば、従来のmutexを取得するだけなど)。
 
 この提案における新しいAPIと既存のAPIの関係をさらに説明するために、議論された型に`@available`を残すことを選択した。注目すべきは、Jobの実行のような操作については、この提案で導入される以前は公式なAPIが存在しないことである。
 
@@ -767,6 +935,7 @@ protocol SerialExecutor: Executor {
 
 - [[Pitch] Custom Actor Executors](https://forums.swift.org/t/pitch-custom-actor-executors/63135)
 - [SE-0392: Custom Actor Executors](https://forums.swift.org/t/se-0392-custom-actor-executors/63599)
+- [[Second review] SE-0392: Custom Actor Executors](https://forums.swift.org/t/second-review-se-0392-custom-actor-executors/64257)
 
 ### プロポーザルドキュメント
 
