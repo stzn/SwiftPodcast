@@ -1,7 +1,7 @@
 # Structured Task vs Unstructured Task
 
 - Structured Task(async let, TaskGroup)
-  - 宣言されたスコープの終わりまで生存する
+  - タスクは宣言されたスコープの終わりまで生存する
 - Unstructured Task(Task {}, Task.detached {})
 
 **使えるときはいつでもStructured Taskのほうが好ましい**
@@ -17,8 +17,8 @@
 - Unstructured Taskは明示的にcancelメソッドを呼ぶ必要がある
 - キャンセルは協調的なのですぐにタスクがストップするわけではない。"isCancelled"フラグが立つだけ。
 - キャンセルは競合する(=キャンセルチェックのタイミングまでに処理がキャンセルされているかどうかは場合による)
-- 重い処理の前にはまだ処理が必要か確認するためにキャンセルチェックをするべき
-- キャンセルチェックは同期的なので、キャンセル対応が必要な関数は、次の処理が同期か非同期か関係なく、継続する前にチェックするべき
+- なので、重い処理の前にはまだ処理が必要か確認するためにキャンセルチェックをするべき
+- キャンセルチェックは同期的なので、キャンセル対応が必要な関数は、次の処理が同期か非同期か関係なく処理を継続する前にチェックするべき
 - タスク実行中の場合はisCancelledやcheckCancellationメソッドは役に立つ
 - タスクがsuspend中や実行されていない場合はwithTaskCancellationHandlerが役に立つ
 
@@ -58,11 +58,12 @@ public func next() async -> Order? {
 }
 ```
 
-CancelHandlerは即時実行されるので、bodyとはスレッドが異なる可能性があるため、stateは共有可変状態となり、データ競合を防ぐ必要がある。
+CancelHandlerは即時実行され、bodyとはスレッドが異なる可能性があるため、stateは共有可変状態となり、データ競合を防ぐ必要がある。
 
 Actorはカプセル化された状態を保護するのに適しているが、ステートマシンの個々のプロパティを変更したり読み取ったするため、今回Actorは適切ではない。
+さらに、Actorに対する操作の実行順序を保証することはできないので、キャンセルが最初に実行されることを保証できない。何か別のものが必要。
 
-さらに、Actorに対する操作の実行順序を保証することはできないので、キャンセルが最初に実行されることを保証できない。何か別のものが必要です。今回はSwiftのAtomicsパッケージからAtomicsを使った。ディスパッチキューやロックでもOK。
+※ 今回はSwiftのAtomicsパッケージからAtomicsを使った。ディスパッチキューやロックでもOK。
 
 このメカニズムは、データ競合を避けながら、共有可変状態を同期させることを可能にし、一方で、CancelHandlerで非構造化タスクを導入することなく、実行中のstateをキャンセルできるようにする。
 
@@ -101,7 +102,8 @@ private final class OrderState: Sendable {
 
 ## 最大実行数の制限
 
-最初に最大実行数だけaddTaskして、最初のタスクを得たら次のタスクをaddTaskする。
+- タスクを作りすぎると他の作業をするスペースがなくなってしまう
+- 最初に最大実行数だけaddTaskして、最初のタスクの結果を得たら次のタスクをaddTaskする。
 
 ```swift
 func chopIngredients(_ ingredients: [any Ingredient]) async -> [any ChoppedIngredient] {
@@ -146,6 +148,8 @@ withTaskGroup(of: Something.self) { group in
 ##　DiscardingTaskGroup
 
 - 戻り値を返さない完了した子タスクの結果を保持し続けない
+- 自動でリリースするのでcancelを呼ぶ必要がない
+- ある子タスクでエラーがthrowされると他の子タスクは自動でキャンセルされる
 
 ↓は完了した子タスクの結果を保持しているため、効率がよくない
 
