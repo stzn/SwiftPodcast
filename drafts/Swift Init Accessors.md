@@ -5,15 +5,19 @@
   - [動機](#動機)
   - [内容](#内容)
   - [詳細](#詳細)
-    - [`init`アクセサのシグネチャ](#initアクセサのシグネチャ)
     - [`self`のプロパティを確実に初期化する](#selfのプロパティを確実に初期化する)
     - [メンバーワイズイニシャライザ](#メンバーワイズイニシャライザ)
+    - [計算プロパティ上の`init`アクセサ](#計算プロパティ上のinitアクセサ)
+    - [readonlyプロパティに対する`init`アクセサ](#readonlyプロパティに対するinitアクセサ)
+    - [`init`アクセサとプロパティの初期値](#initアクセサとプロパティの初期値)
   - [ソース互換性](#ソース互換性)
   - [API互換性](#api互換性)
   - [導入の影響](#導入の影響)
   - [検討された代替案](#検討された代替案)
+    - ["initializes"と"accesses"のシンタックス](#initializesとaccessesのシンタックス)
   - [将来の方向](#将来の方向)
     - [ローカル変数の`init`アクセサ](#ローカル変数のinitアクセサ)
+    - [storageRestrictionsの他の機能への一般化](#storagerestrictionsの他の機能への一般化)
   - [参考リンク](#参考リンク)
     - [Forums](#forums)
     - [プロポーザルドキュメント](#プロポーザルドキュメント)
@@ -70,7 +74,8 @@ struct Proposal {
 struct Angle {
   var degrees: Double
   var radians: Double {
-    init(initialValue) initializes(degrees) {
+    @storageRestrictions(initializes: degrees)
+    init(initialValue) {
       degrees = initialValue * 180 / .pi
     }
 
@@ -88,7 +93,7 @@ struct Angle {
 }
 ```
 
-`init`アクセサのシグネチャは、最大2つのタイプの格納プロパティを指定する。これは、そのアクセサによって、(`accesses`経由で)アクセスされるプロパティと(`initializes`経由で)初期化されるプロパティである。`initializes`と`accesses`は`init`アクセサの副作用である。`accesses`効果(effect)は、`init`アクセサ内からアクセスできる他の格納プロパティを指定する(`self`の他の使用は許可されていない)ので、計算プロパティの`init`アクセサが呼び出される前に初期化する必要がある。`init`アクセサは、すべての制御フローパス上で初期化された格納プロパティのそれぞれを初期化する必要がある。上の例の`radians`プロパティは、`accesses`効果は指定しないが、`degree`プロパティを初期化するので、`initializes(degree)`のみを指定している。
+`init`アクセサのシグネチャは、最大2つのタイプの格納プロパティを指定する。これは、そのアクセサによって、(`accesses`経由で)アクセスされるプロパティと(`initializes`経由で)初期化されるプロパティである。`initializes`と`accesses`は`init`アクセサの副作用である。`accesses`効果(effect)は、`init`アクセサ内からアクセスできる他の格納プロパティを指定する(`self`の他の使用は許可されていない)ので、計算プロパティの`init`アクセサが呼び出される前に初期化する必要がある。`init`アクセサは、すべての制御フローパス上で初期化された格納プロパティのそれぞれを初期化する必要がある。上の例の`radians`プロパティは、`accesses`効果は指定しないが、`degree`プロパティを初期化するので、`initializes: degree`のみを指定している。
 `accesses`効果はその中身を他の格納プロパティの中に置くことで初期化できる:
 
 ```swift
@@ -96,7 +101,8 @@ struct ProposalViaDictionary {
   private var dictionary: [String: String]
 
   var title: String {
-    init(newValue) accesses(dictionary) {
+    @storageRestrictions(accesses: dictionary)
+    init(newValue) {
       dictionary["title"] = newValue
     }
 
@@ -105,7 +111,8 @@ struct ProposalViaDictionary {
   }
 
    var text: String {
-    init(newValue) accesses(dictionary) {
+    @storageRestrictions(accesses: dictionary)
+    init(newValue) {
       dictionary["text"] = newValue
     }
 
@@ -135,7 +142,8 @@ struct Wrapper<T> {
 struct S {
   private var _value: Wrapper<Int>
   var value: Int {
-    init(newValue) initializes(_value) {
+    @storageRestrictions(initializes: _value)
+    init(newValue) {
       self._value = Wrapper(wrappedValue: newValue)
     }
 
@@ -161,16 +169,13 @@ S(value: 10)
 
 ## 詳細
 
-本提案では、計算プロパティのアクセサリストに記述できる`init`アクセサブロックの新しい構文を追加する。`init`アクセサは、文法に以下の生成ルールを追加する:
+本提案では、計算プロパティのアクセサリストに記述できる`init`アクセサという新しい種類のアクセサを追加する。`init`アクセサは、文法に以下の生成ルールを追加する:
 
 ```
-init-accessor -> 'init' init-accessor-parameter[opt] init-effect[opt] access-effect[opt] function-body
+init-accessor -> 'init' init-accessor-parameter
+init-accessor -> 'init' init-accessor-parameter[opt] function-body
 
 init-accessor-parameter -> '(' identifier ')'
-
-init-effect -> 'initializes' '(' identifier-list ')'
-
-access-effect -> 'accesses' '(' identifier-list ')'
 
 accessor-block -> init-accessor
 ```
@@ -189,9 +194,22 @@ struct Minimal {
 }
 ```
 
-### `init`アクセサのシグネチャ
+また、この提案では `init` アクセサブロックのストレージ制限を記述するための新しい `storageRestrictions` 属性を追加しする。この属性は `init` アクセサにのみ使用することができる。 この属性は文法中の以下の生成規則で記述される:
 
-`init`アクセサ宣言は、オプションでシグネチャを指定することができる。`init`アクセサのシグネチャは、パラメータリストと、それに続く初期化効果指定子句で構成される。初期化効果には、構文上の`initializes`キーワードの引数リストに指定されたこのアクセサによって初期化される格納プロパティのリストと、構文上の`accesses`キーワードの引数リストに指定されたこのアクセサによってアクセスされる格納プロパティのリストがあり、それぞれは省略可能である:
+```
+attribute ::= storage-restrictions-attribute
+
+storage-restrictions-attribute ::= '@' storageRestrictions '(' storage-restrictions[opt] ')'
+
+storage-restrictions-initializes ::= 'initializes' ':' identifier-list
+storage-restrictions-accesses ::= 'accesses' ':' identifier-list
+
+storage-restrictions ::= storage-restrictions-accesses
+storage-restrictions ::= storage-restrictions-initializes
+storage-restrictions ::= storage-restrictions-initializes ',' storage-restrictions-accesses
+```
+
+ストレージ制限属性は、このアクセサによって初期化される格納プロパティのリスト(`storage-restrictions-initializes`の識別子リスト)と、このアクセサによってアクセスされる格納プロパティのリスト(storage-restrictions-accessesの識別子リスト)を含むことができ、それぞれはオプションである:
 
 ```swift
 struct S {
@@ -200,7 +218,8 @@ struct S {
   var _x: Int
 
   var x: Int {
-    init(newValue) initializes(_x) accesses(readMe) {
+    @storageRestrictions(initializes: _x, accesses: readMe)
+    init(newValue) {
       print(readMe)
       _x = newValue
     }
@@ -213,9 +232,9 @@ struct S {
 
 アクセサがデフォルトのパラメータ名`newValue`を使用し、格納プロパティを初期化もアクセスもしない場合、このシンタックスは必要ない。
 
-`init`アクセサは、格納プロパティのセットの初期化を含めることができる。入れ込まれた格納プロパティは、`initializes`効果によって指定される。`init`アクセサの本文は、すべての制御フローパスで入れ込まれた格納プロパティを初期化することが要求される。
+`init`アクセサは、格納プロパティのセットの初期化を含めることができる。入れ込まれた格納プロパティは、その属性の`initializes`パラメータによって指定される。`init`アクセサの本文は、すべての制御フローパスで入れ込まれた格納プロパティを初期化することが要求される。
 
-`init`アクセサは、本文が評価されるときにすでに初期化されている格納プロパティのセットを要求することもでき、これは`accesses`効果を通じて指定される。これらの格納プロパティは、アクセサ本文の中でアクセスすることができる。逆に言うと、`self`の他のプロパティやメソッドは、アクセサ本文の中では利用できず、`self`はオブジェクト全体として利用できない(たとえば、`self`上のメソッドを呼び出すことができない)。
+`init`アクセサは、本文が評価されるときにすでに初期化されている格納プロパティのセットを要求することもでき、これはその属性の`accesses`パラメータを通じて指定される。これらの格納プロパティは、アクセサ本文の中でアクセスすることができる。逆に言うと、`self`の他のプロパティやメソッドは、アクセサ本文の中では利用できず、`self`はオブジェクト全体として利用できない(たとえば、`self`上のメソッドを呼び出すことができない)。
 
 
 ### `self`のプロパティを確実に初期化する
@@ -234,7 +253,8 @@ struct S {
   var x1: Int
   var x2: Int
   var computed: Int {
-    init(newValue) initializes(x1, x2) { ... }
+    @storageRestrictions(initializes: x1, x2)
+    init(newValue) { ... }
   }
 
   init() {
@@ -250,7 +270,8 @@ struct S {
   var x: Int
   var y: Int
   var point: (Int, Int) {
-    init(newValue) initializes(x, y) {
+    @storageRestrictions(initializes: x, y)
+    init(newValue) {
 	    (self.x, self.y) = newValue
     }
     get { (x, y) }
@@ -278,8 +299,9 @@ struct S {
   var x1: Int
   var x2: Int
   var x3: Int
+  @storageRestrictions(initializes: x1, x2)
   var computed: Int {
-    init(newValue) initializes(x1, x2) { ... }
+    init(newValue) { ... }
   }
 
   init() {
@@ -296,8 +318,9 @@ struct S {
 struct S {
   var x: Int
   var y: Int
+  @storageRestrictions(initializes: x, y)
   var point: (Int, Int) {
-    init(newValue) initializes(x, y) {
+    init(newValue) {
 	    (self.x, self.y) = newValue
     }
     get { (x, y) }
@@ -313,13 +336,14 @@ struct S {
 
 ### メンバーワイズイニシャライザ
 
-構造体が独自のイニシャライザを宣言していない場合、構造体の格納されたプロパティに基づいて暗黙のメンバワイズイニシャライザを受け取る(格納プロパティは初期化される必要があるため)。`init`アクセサの多くのユースケースは、1つの計算プロパティを完全に抽象化して、1つの格納プロパティをバッキングストレージとして使用するものである(プロパティラッパのユースケースなど)。プログラマは主に計算プロパティを通じてストレージとやり取りするため、`init`アクセサはストレージの初期化に適したメカニズムを提供する。そのため、メンバーワイズイニシャライザのパラメーターリストには、格納プロパティのパラメータではなく、格納プロパティの初期化を包含する計算プロパティが含まれる。
+構造体が独自のイニシャライザを宣言していない場合、構造体の格納されたプロパティに基づいて暗黙のメンバワイズイニシャライザを受け取る(格納プロパティは初期化される必要があるため)。`init`アクセサの多くのユースケースは、1つの計算プロパティを完全に抽象化して、1つの格納プロパティをバッキングストレージとして使用するものである(プロパティラッパのユースケースなど)。プログラマは主に計算プロパティを通じてストレージとやり取りするため、`init`アクセサはストレージの初期化に適したメカニズムを提供する。そのため、メンバワイズイニシャライザのパラメータリストには、initアクセサを持つ計算プロパティと、initアクセサに包含されていない格納プロパティのみが含まれる。
 
 ```swift
 struct S {
   var _x: Int
   var x: Int {
-    init(newValue) initializes(_x) {
+    @storageRestrictions(initializes: _x)
+    init(newValue) {
       _x = newValue
     }
 
@@ -342,13 +366,15 @@ init(x: Int, y: Int) {
 }
 ```
 
-計算プロパティの`accesses`効果である格納プロパティが、ソースコード内でその計算プロパティの後に並んでいる場合、メンバワイズイニシャライザは合成されない:
+メンバワイズイニシャライザのパラメータは、ソースの順序に従う。しかし、initアクセサが、メンバワイズイニシャライザで先行する格納プロパティに `アクセス` する場合、メンバワイズイニシャライザでパラメータが発生するのと同じ順序で プロパティを初期化することはできない。例えば:
+
 
 ```swift
 struct S {
   var _x: Int
   var x: Int {
-    init(newValue) initializes(_x) accesses(y) {
+    @storageRestrictions(initializes: _x, accesses: y)
+    init(newValue) {
       _x = newValue
     }
 
@@ -360,7 +386,7 @@ struct S {
 }
 ```
 
-上記のstructは、以下のようなメンバワイズイニシャライザを受け取ることになるが、これは無効であるため、エラーが発生する:
+上記のstructのメンバワイズイニシャライザで、プロパティをパラメータと同じ順序で初期化するように記述すると、エラーが発生する：
 
 ```swift
 init(x: Int, y: Int) {
@@ -369,7 +395,103 @@ init(x: Int, y: Int) {
 }
 ```
 
-さまざまな計算プロパティを通して様々な方法で1つの格納プロパティを投影する複数の`init`アクセサのユースケースは、初期化するための唯一の優先される方法がない。ほとんどの場合、これらのユースケースは、初期化できる方法ごとに異なるメンバーワイズイニシャライザを望んでいる。型に、同じ格納プロパティを初期化する`init`アクセサを持つ複数の計算プロパティが含まれている場合、メンバワイズイニシャライザは合成されない。
+したがって、コンパイラは、合成されたメンバワイズイニシャライザにおいて、アクセス句を尊重するように初期化の順序を決める:
+
+```swift
+init(x: Int, y: Int) {
+  self.y = y
+  self.x = x
+}
+```
+
+この提案の最初のレビューでは、順序外の初期化が驚きを引き起こすという懸念に基づいて、このような場合のメンバワイズイニシャライザを抑制した。しかし、フィールドは独立して初期化され(あるいは、相対的な順序を定義するアクセス関係を持ち)、ここでの副作用は`init`アクセサ自体の副作用に限定されるという事実を考慮すると、任意の差異を観察するためには、初期化中にグローバルな副作用を導入しなければならない。
+
+メンバワイズイニシャライザ子を合成できない場合もある。例えば、ある型に、同じ格納プロパティを初期化する`init`アクセサを持つ複数の計算プロパティが含まれている場合、メンバワイズイニシャライザ子内でどの計算プロパティを使用すべきかは明らかではない。このような場合、メンバワイズイニシャライザは合成されない。
+
+### 計算プロパティ上の`init`アクセサ
+
+`init`アクセサは、計算プロパティで提供することができ、その場合は初期化に使用され、メンバワイズイニシャライザのデフォルト引数として使用される。例えば、以下のように指定する:
+
+```swift
+struct Angle {
+  var degrees: Double
+  
+  var radians: Double {
+    @storageRestrictions(initializes: degrees)
+    init(initialValue) {
+      degrees = initialValue * 180 / .pi
+    }
+
+    get { degrees * .pi / 180 }
+    set { degrees = newValue * 180 / .pi }
+  }
+}
+```
+
+### readonlyプロパティに対する`init`アクセサ
+
+`init`アクセサは、setterを持たないプロパティに提供することができる。このようなプロパティは`let`プロパティと同じように動作し、一度だけ(正確に)初期化され、その後は設定されない:
+
+```swift
+struct S {
+  var _x: Int
+
+  @storageRestrictions(initializes: _x)
+  var x: Int {
+    init(initialValue) {
+      self._x = x
+    }
+
+    get { _x }
+  }
+
+  init(halfOf y: Int) {
+    self.x = y / 2 // initアクセサはxに対して呼んでいるためOK 
+    self.x = y / 2 // xはsetできないためエラー
+  }
+}
+```
+
+### `init`アクセサとプロパティの初期値
+
+`init`アクセサを持つプロパティは初期値を持つことができる。例えば:
+
+```swift
+struct WithInitialValues {
+  var _x: Int
+
+  var x: Int = 0 {
+    @storageRestrictions(initializes: _x)
+    init(initialValue) {
+      _x = initialValue
+    }
+
+    get { ... }
+    set { ... }
+  }
+
+  var y: Int
+}
+```
+
+合成されるメンバワイズイニシャライザは、その初期値をデフォルト引数として使用する。次のようになる:
+
+```swift
+init(x: Int = 0, y: Int) {
+  self.x = x  // _xを初期化するinitアクセサを呼ぶ
+  self.y = y
+}
+```
+
+手動で書かれたイニシャライザでは、初期値は、ユーザが書いたコードの前に、`init`アクセサでプロパティを初期化するために使用される:
+
+```swift
+init() {
+  // 暗黙的にself.x = 0で初期化されている
+  self.y = 10
+  self.x = 20 // setterを呼ぶ
+}
+```
 
 ## ソース互換性
 
@@ -385,6 +507,8 @@ init(x: Int, y: Int) {
 
 ## 検討された代替案
 
+### "initializes"と"accesses"のシンタックス
+
 TBD
 
 ## 将来の方向
@@ -392,6 +516,42 @@ TBD
 ### ローカル変数の`init`アクセサ
 
 ローカル変数の`init`アクセサは、`init`や`set`への代入の書き換えが`self`の初期化状態に基づいていないため、確定的な初期化に対する意味合いが異なる。ローカル変数のgetterとsetterは、スコープ内の他の任意のローカル変数をキャプチャすることができるため、プロパティへの代入が`init`や`set`に書き換えられる可能性がある同じコードパスの中で、初期化前にエスケープした使用があるかを診断するためにより多くの課題が出てくる。そのため、`init`アクセサを持つローカル変数は、将来導入される可能性のあるものとしている。
+
+### storageRestrictionsの他の機能への一般化
+
+将来的には、`storageRestrictions`属性を一般化して、他の関数にも適用できるようになるかもしれない。例えば、クラス内で共通の初期化関数を実装することができるようになる:
+
+```swift
+class C {
+  var id: String
+  var state: State
+
+  @storageRestrictions(initializes: state, accesses: id)
+  func initState() {
+    self.state = /* 初期化のためのコードをここに */
+  }
+
+  init(id: String) {
+    self.id = id
+    initState() // idにアクセスしてstateを初期化するのはOK
+  }
+}
+```
+
+原則は`init`アクセサと同じ。関数の実装は、特定の格納プロパティにのみアクセスし、他のプロパティはすべてのパスで初期化するように制限することができます。関数の実装は、特定の格納プロパティにのみアクセスするように制限することができ、すべてのパスに沿って他のプロパティを初期化することができる。
+
+この一般化には、`init`アクセサには関係のない制限が伴う。例えば、`initState`関数は、`state`が初期化された後に呼び出すことはできず()`state`ステートを再初期化してしまうから)、「第一級」関数として使用することもできない:
+
+```swift
+  init(id: String) {
+    self.id = id
+    initState() // idにアクセスしてstateを初期化するのはOK
+
+    initState() // `state`は既に初期化されているためエラー
+    let fn = self.initState // 関数値のように扱うことはできない
+  }
+```
+
 
 ## 参考リンク
 
@@ -402,4 +562,4 @@ TBD
 
 ### プロポーザルドキュメント
 
-- [Init Accessors](https://github.com/apple/swift-evolution/blob/main/proposals/0400-init-accessors.md)
+- [Init Accessors](https://github.com/apple/swift-evolution/blob/main/proposals/0400-init-accessors.あ０
