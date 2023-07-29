@@ -1,6 +1,23 @@
 # プロパティラッパで起きるActor分離の除去
 
-<!-- 最後にTable of Contentsを入れる -->
+- [プロパティラッパで起きるActor分離の除去](#プロパティラッパで起きるactor分離の除去)
+  - [概要](#概要)
+  - [動機](#動機)
+    - [SwiftUIを使った例](#swiftuiを使った例)
+    - [SwiftUIを使用しない例](#swiftuiを使用しない例)
+    - [実際に問題が発生する？](#実際に問題が発生する)
+  - [内容](#内容)
+  - [詳細](#詳細)
+  - [ソース互換性](#ソース互換性)
+    - [ソースの互換性評価](#ソースの互換性評価)
+  - [ABI Stabilityへの影響](#abi-stabilityへの影響)
+  - [APIレジリエンスへの影響](#apiレジリエンスへの影響)
+  - [検討された代替案](#検討された代替案)
+    - [Swift5のプロパティラッパベースの推論について警告を出す](#swift5のプロパティラッパベースの推論について警告を出す)
+  - [参考リンク](#参考リンク)
+    - [Forums](#forums)
+    - [プロポーザルドキュメント](#プロポーザルドキュメント)
+
 
 ## 概要
 
@@ -202,6 +219,7 @@ struct MyView: View {
 
 - [[Pitch] Stop inferring actor isolation based on property wrapper usage](https://forums.swift.org/t/pitch-stop-inferring-actor-isolation-based-on-property-wrapper-usage/63262)
 - [SE-0401: Remove Actor Isolation Inference caused by Property Wrappers](https://forums.swift.org/t/se-0401-remove-actor-isolation-inference-caused-by-property-wrappers/65618)
+- [[Accepted with modifications] SE-0401: Remove Actor Isolation Inference caused by Property Wrappers](https://forums.swift.org/t/accepted-with-modifications-se-0401-remove-actor-isolation-inference-caused-by-property-wrappers/66241)
 
 ### プロポーザルドキュメント
 
