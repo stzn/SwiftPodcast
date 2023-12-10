@@ -136,13 +136,13 @@ func alwaysOnMainActor() /* 同期である必要がある! */ {
 
 ### 低レベルの設計
 
-ExecutorのAPI設計は、高性能な実装をサポートすることを目的としており、Custom Executorは主にエキスパートによって実装されることを想定している。そのため、以下の設計では、考えられる他のほとんどの目標よりも、抽象化コストを確実に排除することに重点を置いている。特に、プロトコルによって指定される atomic な操作は、一般に、実装が正しく使用することを要求される不透明で unsafe な型によって表現される。これらの操作は、Swift Concurrencyの高レベルの言語操作と同様に、より便利な API を実装するために使用される。
+ExecutorのAPI設計は、高性能な実装をサポートすることを目的としており、Custom Executorは主にエキスパートによって実装されることを想定している。そのため、以下の設計では、考えられる他のほとんどの目標よりも、抽象化コストを確実に排除することに重点を置いている。特に、プロトコルによって指定されるatomicな操作は、一般に、実装が正しく使用することを要求される不透明でunsafeな型によって表現される。これらの操作は、Swift Concurrencyの高レベルの言語操作と同様に、より便利なAPIを実装するために使用される。
 
 ### Executors
 
 最初に、次に説明するすべての特定の種類の Executorの親プロトコルとして機能する`Executor`プロトコルを紹介する。これは最も単純な種類の　Executorで、投入されたタスクについていかなる順序の保証も提供しない。Executorは、送られてきたJobを並行して実行するか、順次実行するかを決定することができる。
 
-このプロトコルは Swift Concurrencyの導入以来ずっと存在していたが、この提案では、言語内で新しく導入された move-only 機能を利用するために、その API を改訂する。既存の`UnownedExecutorJob`API は、move-onlyな`Job`を受け入れる新しいものがあるため、非推奨となる。ただし、`UnownedExecutorJob`型は利用可能なままである(そして安全ではない)。なぜなら、今日でもいくつかの使用パターンは、move-only型の最初の改訂版ではサポートされていないからである。
+このプロトコルは Swift Concurrencyの導入以来ずっと存在していたが、この提案では、言語内で新しく導入された move-only 機能を利用するために、そのAPIを改訂する。既存の`UnownedExecutorJob`API は、move-onlyな`Job`を受け入れる新しいものがあるため、非推奨となる。ただし、`UnownedExecutorJob`型は利用可能なままである(そして安全ではない)。なぜなら、今日でもいくつかの使用パターンは、move-only型の最初の改訂版ではサポートされていないからである。
 
 Concurrencyのランタイムは、Executorの`enqueue(_:)`メソッドを使用して、与えられたExecutorにあるタスクをスケジューリングする。
 
@@ -173,7 +173,7 @@ final class MyOldExecutor: SerialExecutor {
 
 Executorは、そのExecutorJobを実行するときに、特定の順序規則に従うことが要求される。
 
--`ExecutorJob.runJobSynchronously(_:)`の呼び出しは、`enqueue(_:)`の呼び出しの後にしなければならない
+-`ExecutorJob.runJobSynchronously(_:)`の呼び出しは、`enqueue(_:)`の呼び出しの後にしなければならないzzzz
 - もし、ExecutorがSerialなExecutorであれば、すべてのJobの実行は*完全に順序付けられなければならない*。`enqueue(_:`)で同じ Executorに投入された2つの異なるJobAとBに対して、AのすべてのイベントがBのすべてのイベントの前に起こるか、BのすべてのイベントがAのすべてのイベントよりも先に起こらなければならない(happen-before)
   - 例えば、一方のJobの優先度が他方より高い場合など。しかし、A と B はそれぞれ独立して、他方が実行される前に完了しなければならないことに注意する必要がある
 
@@ -210,7 +210,7 @@ extension SerialExecutor {
 }
 ```
 
-`SerialExecutor`は、参照カウントのオーバーヘッドを発生させずにExecutorを渡すために Swift ランタイムによって使用される`UnownedSerialExecutor` でそれ自体をラップすること以外、新しい API を導入していない。
+`SerialExecutor`は、参照カウントのオーバーヘッドを発生させずにExecutorを渡すために Swift ランタイムによって使用される`UnownedSerialExecutor` でそれ自体をラップすること以外、新しいAPIを導入していない。
 
 ```swift
 ///`SerialExecutor`へのunownedの参照値。
@@ -233,7 +233,7 @@ public struct UnownedSerialExecutor: Sendable {
 
 ### ExecutorJobs
 
-`ExecutorJob`は、Executorが実行すべきタスクのかたまりを表現したものである。例えば、`Task`は、事実上、実行するために Executorに enqueue された一連の ExecutorJob から構成されている。Swift Concurrencyで作成される最も一般的なタイプの ExecutorJobが「部分タスク」であるにもかかわらず、この API を「部分タスク」だけに制限したり、タスクとあまり密接に結びつけたくないので、「ExecutorJob」という名前が選ばれた。
+`ExecutorJob`は、Executorが実行すべきタスクのかたまりを表現したものである。例えば、`Task`は、事実上、実行するために Executorに enqueue された一連の ExecutorJob から構成されている。Swift Concurrencyで作成される最も一般的なタイプの ExecutorJobが「部分タスク」であるにもかかわらず、このAPIを「部分タスク」だけに制限したり、タスクとあまり密接に結びつけたくないので、「ExecutorJob」という名前が選ばれた。
 
 Swift Concurrencyが何らかのタスクを実行する必要があるときはいつでも、ExecutorJob が実行されるべき特定のExecutor上で`UnownedExecutorJobs`を enqueue する。`UnownedExecutorJob`型は、Swift の低レベルの ExecutorJob 表す opaque なラッパーである。それはわかりやすく検査したり、コピーはできず、決して2回以上実行されてはいけない。
 
@@ -858,7 +858,7 @@ ActorがCustom Executorにオプトインするために提案された方法は
 `MainActor`と同様に、非同期`main`関数で使われる`SerialExecutor`をオーバーライドすることが可能なはず。正確なセマンティクスはまだ設計されていないが、私たちは、非同期処理が行われる前にメインのExecutorを置き換えることができるAPIを想定しており、この方法で`MainActor`から期待される同期実行を保証し続けることができる。
 
 ```swift
-// DRAFT; Names of protocols or exact shape of such replacement API are non-final.
+// DRAFT; Names of protocols or exact shape of such replacementAPIare non-final.
 
 protocol MainActorSerialExecutor: [...]SerialExecutor { ... }
 func setMainActorExecutor(_ executor: some MainActorSerialExecutor) { ... }
@@ -868,7 +868,7 @@ func setMainActorExecutor(_ executor: some MainActorSerialExecutor) { ... }
     // メインの「本来の」スレッドの上
     
     // 以下の呼び出しを行う必要がある。
-    // - 中断ポイントに遭遇する前
+    // - suspendポイントに遭遇する前
     setMainActorExecutor(...) 
     
     // まだメインの「本来の」スレッドの上
