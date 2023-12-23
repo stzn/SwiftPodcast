@@ -425,6 +425,7 @@ TBD
 ### Forums
 
 - [SE-0413: Typed throws](https://forums.swift.org/t/se-0413-typed-throws/68507)
+- [[Accepted] SE-0413: Typed throws](https://forums.swift.org/t/accepted-se-0413-typed-throws/69099)
 
 ### プロポーザルドキュメント
 
