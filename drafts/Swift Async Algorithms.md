@@ -11,7 +11,13 @@
     - [Joined](#joined)
   - [非同期シーケンスの生成](#非同期シーケンスの生成)
     - [AsyncSyncSequence](#asyncsyncsequence)
+      - [詳細設計](#詳細設計)
+        - [名前](#名前)
     - [Channel](#channel)
+      - [提案内容](#提案内容)
+      - [詳細](#詳細)
+      - [検討された代替案](#検討された代替案)
+      - [クレジット/インスピレーション](#クレジットインスピレーション)
   - [非同期イテレーションのパフォーマンスの最適化](#非同期イテレーションのパフォーマンスの最適化)
     - [AsyncBufferedByteIterator](#asyncbufferedbyteiterator)
   - [他の役に立つ非同期シーケンス](#他の役に立つ非同期シーケンス)
@@ -225,15 +231,73 @@ let characters = "abcde".async
 
 この変換は、`AsyncSequence`で特に利用可能な操作をテストするのに役立つが、他の`AsyncSequence`型と組み合わせて、よく知られたデータソースを提供するのにも役立つ。
 
+#### 詳細設計
+
+`.async`プロパティは、基底の`Sequence`型のジェネリックな`AsyncSyncSequence`を返す。
+
+```swift
+extension Sequence {
+  public var async: AsyncSyncSequence<Self> { get }
+}
+
+public struct AsyncSyncSequence<Base: Sequence>: AsyncSequence {
+  ...
+}
+
+extension AsyncSyncSequence: Sendable where Base: Sendable { }
+extension AsyncSyncSequence.Iterator: Sendable where Base.Iterator: Sendable { }
+```
+
+##### 名前
+
+このプロパティの名前と型の名前は、Swift 標準ライブラリの命名規約に一致する。プロパティは`.lazy`からヒントを得て簡潔な名前であり、型は構築された `AsyncSequence` の遅延動作を参考にして命名された。
+
 ### Channel
 
 https://github.com/apple/swift-async-algorithms/blob/main/Sources/AsyncAlgorithms/AsyncAlgorithms.docc/Guides/Channel.md
 
-`AsyncStream`は、SwiftのConcurrencyを使用しないコンテキストから、使用するコンテキストにバッファリングされた要素を送信するメカニズムを導入した。その設計は、潜在的なユースケースの一部にしか対応しておらず、 2つの同時実行ドメインにわたって取り出されるback pressureが欠けていた。
+#### 提案内容
+
+`AsyncStream`は、Swift Concurrencyを使用しないコンテキストから、使用するコンテキストにバッファリングされた要素を送信するメカニズムを導入した。その設計は、潜在的なユースケースの一部にしか対応しておらず、 2つの同時実行ドメインにわたって取り出されるback pressureが欠けていた。
 
 back pressureをサポートし、あるタスクから別のタスクへの複数の値の通信を可能にするシステムを実現するために、新しい型であるチャネル(Channel)を導入した。チャネルは、イテレーションの消費を待機する非同期の送信機能を備えた参照型の非同期シーケンス。チャネルによって送信された各値は、イテレーションでその値の消費がされるまで待機する。その待機行動により、消費側から加えられたback pressureのアフォーダンスが生産側に伝達されるようになる。これは、生産が消費を超えず、消費が生産を超えないことを意味する。終了イベントをチャネルに送信すると、すべての生産者と消費者の保留中のすべての操作が即座に再開される。
 
-チャネルは、特に、あるタスクが値を生成し、別のタスクがその値を消費する場合、タスク間の通信タイプとして使用することを目的としている。一方で、pause/resumeを経由して`send`および`fail`によって適用されるback pressureにより、値の生成がイテレーションからの値の消費を超えないことが保証されている。これらの各メソッドは、イベントをキューに入れた後にpauseし、イテレータで`next`が次に呼び出されたときにresumeされる。一方、`finish`を呼び出すと、すべての生産者と消費者の保留中のすべての操作がすぐに再開される。したがって、suspendされたすべての`send`操作は即座に`resume`され、`suspend`されたすべての`next`操作は、イテレーションの終了を示す`nil`を生成することによって行われる。`send`へのそれ以上の呼び出しはすぐに`resume`される。
+#### 詳細
+
+`AsyncStream`型と`AsyncThrowingStream`型と同様に、back pressureで要素を送信する型には2つのバージョンがある。これらの2つのバージョンは、生成される要素がエラーをする/しないを考慮している。
+
+```swift
+public final class AsyncChannel<Element: Sendable>: AsyncSequence, Sendable {
+  public struct Iterator: AsyncIteratorProtocol, Sendable {
+    public mutating func next() async -> Element?
+  }
+  
+  public init(element elementType: Element.Type = Element.self)
+  
+  public func send(_ element: Element) async
+  public func finish()
+  
+  public func makeAsyncIterator() -> Iterator
+}
+
+public final class AsyncThrowingChannel<Element: Sendable, Failure: Error>: AsyncSequence, Sendable {
+  public struct Iterator: AsyncIteratorProtocol, Sendable {
+    public mutating func next() async throws -> Element?
+  }
+  
+  public init(element elementType: Element.Type = Element.self, failure failureType: Failure.Type = Failure.self)
+  
+  public func send(_ element: Element) async
+  public func fail(_ error: Error) where Failure == Error
+  public func finish()
+  
+  public func makeAsyncIterator() -> Iterator
+}
+```
+
+それぞれの型は、エレメントを送信する関数とターミナル・イベントを送信する関数を持つ。
+
+チャネルはタスク間の通信タイプとして使用することを意図している。特に、あるタスクが値を生成し、別のタスクがその値を消費する場合。一方で、`send`によるsuspension/resumeによるback pressureにより、値の生成がイテレーションによる値の消費を超えないことが保証されている。このメソッドは、イベントをキューに入れた後にsuspendし、イテレータの`next`が次に呼び出されたときにresumeされる。一方、`finish`または`fail`を呼び出すと、すべての生産者と消費者の保留中のすべての処理が即座に再開される。したがって、suspend中のすべての`send`操作は即座にresumeされ、`suspend`中のすべての`next`操作は、イテレーションの終了を示す`nil`を生成するかエラーをスローする。`send`へのそれ以上の呼び出しはすぐにresumeされる。`send`と`next`の呼び出しは、サポートするタスクがキャンセルされると即座にresumeされる。
 
 ```swift
 let channel = AsyncChannel<String>()
@@ -249,9 +313,17 @@ for await calculationResult in channel {
 }
 ```
 
-上記の例では、タスクを使用して重い計算を実行している。それぞれが`send`メソッドを介して他のタスクに送信される。`send`の呼び出しは、チャネルの次のイテレーションが呼び出されたときに返される。
+上記の例では、タスクを使用して重い計算を実行している。それぞれが`send`メソッドを介して他のタスクに送信される。`send`の呼び出し結果は、チャネルの次のイテレーションが呼び出されたときに返される。
 
-`AsyncChannel`と`AsyncThrowingChannel`は、[Subject](https://developer.apple.com/documentation/combine/subject/)から大きく影響を受けているが、SwiftのConcurrencyを使用してback pressureを適用するという重要な違いがある。
+#### 検討された代替案
+
+「subject」という名前は、sync-to-asyncアダプタタイプの名前としての伝統を考慮して検討された。
+
+`AsyncChannel`と`AsyncThrowingChannel`をアクターにすることも検討さたが、キャンセル内部の構造により、これらのタイプはキャンセルイベントを処理するために新しいタスクを作成する必要がある。この特殊なケースにおけるアクターの利点は、実装をアクターに調整することによる影響を上回るものではなかった。
+
+#### クレジット/インスピレーション
+
+`AsyncChannel`と`AsyncThrowingChannel`は、[Subject](https://developer.apple.com/documentation/combine/subject/)から大きく影響を受けているが、Swift Concurrencyを使用してback pressureを適用するという重要な違いがある。
 
 ## 非同期イテレーションのパフォーマンスの最適化
 
