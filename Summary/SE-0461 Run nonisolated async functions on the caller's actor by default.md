@@ -54,6 +54,26 @@ actor MyActor {
 }
 ```
 
+`@execution` 属性を付けることができるのは（暗黙的または明示的な）`nonisolated` 関数のみ。グローバルアクター、`isolated`、`@isolated(any)`と併用しようとするとエラーが発生する。
+
+```swift
+actor MyActor {
+  var value = 0
+
+  // ❌ @execution(caller)はnonisolatedメソッドのみに付けられる
+  @execution(caller)
+  func isolatedToSelf() async {
+    value += 1
+  }
+
+  @execution(caller) // 🟢
+  nonisolated func canRunAnywhere() async {
+    // ❌ nonisolated なため、MyActor に隔離された value や他の状態にはアクセスできない
+    print(value)
+  }
+}
+```
+
 <details>
 <summary>`@execution(caller)` 属性の使用例</summary>
 
@@ -406,7 +426,6 @@ public func myAsyncAPI() async { ... }
 
 - この変更は既存のコードの挙動を変える可能性があるため、Upcoming Feature Flagを使用して導入される
 - `concurrent` とは、「アクターと並行して実行される」という意味が込められている
-- `@execution` 属性を付けることができるのは（暗黙的または明示的な）`nonisolated` 関数のみ。グローバルアクター、`isolated`、`@isolated(any)`と併用しようとするとエラーになる
 - 同期関数には `@execution` 属性を付けることはできない(今後の機能拡張の可能性あり)
 
 ### SE-0338の意図
